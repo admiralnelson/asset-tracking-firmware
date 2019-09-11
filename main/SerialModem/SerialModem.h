@@ -79,7 +79,10 @@ public:
 private:
 	struct CommandWait
 	{
-		CommandWait(const char * _expects, const char * _command, unsigned int _timeout,std::function<void(std::smatch&)> _successCallback, std::function<void()> _failCallback)
+		CommandWait(const char * _expects, const char * _command, 
+			unsigned int _timeout,
+			std::function<void(std::smatch&)> _successCallback = nullptr, 
+			std::function<void()> _failCallback = nullptr)
 		{
 			strcpy(expects, _expects);
 			strcpy(command, _command);
@@ -113,14 +116,13 @@ private:
 	std::queue<Command*> m_cmdsQueue;
 	std::vector<CommandWait*> m_cmdWaitingList;
 	Stream				 *m_serialStream;
-	TaskHandle_t		 m_taskWrite;
-	TaskHandle_t		 m_taskRead;
-	SemaphoreHandle_t	 m_xSemaphore;
+	TaskHandle_t		 m_task;
 	IPAddress			 m_ipaddr;
 	ENetworkType		 m_netPreffered;
 	bool				 m_isReady	   = false;
 	bool				 m_isGprsReady = false;
 	bool 				 m_isIgnoringNetState = false;
+	bool 				 m_isBusy = false;
 public:
 	SerialModem();
 	SerialModem(bool bIgnoreNetState);
@@ -141,14 +143,15 @@ public:
 	{
 		return m_ipaddr;
 	}
-	
+	bool 		isBusy()
+	{
+		return m_isBusy;
+	}
 	~SerialModem();
 
 private:
-	void		WriteLoop();
-	void		ReadLoop();
-	static void StartTaskImplWriteLoop(void*);
-	static void StartTaskImplReadLoop(void*);
+	void		Loop();
+	static void StartTaskImplLoop(void*);
 
 	const char  *ReadSerial()
 	{

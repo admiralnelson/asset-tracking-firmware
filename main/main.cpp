@@ -7,7 +7,7 @@
 #include <WiFi.h>
 #include <string>
 #include <HardwareSerial.h>
-
+#include <functional>
 
 #define RXD2 16
 #define TXD2 17
@@ -41,6 +41,7 @@ bool callOnce = true;
 bool successDownload = false;
 int waitTimeToDownloadAgain = 60*1000;
 int lastDownload = 0;
+int lastConnect = 0;
 // the loop function runs over and over again until power down or reset
 int prevSignal = 0;
 bool gprsIsConnected = false;
@@ -64,14 +65,14 @@ void loop()
 		gprsIsConnected = p_Modem->GetIsGPRSConnected();
 	}
 	
-	
-	INFO("time lastdownload %d", (int) (millis() - lastDownload));
-	if (p_Modem->GetNetworkStatus() == SerialModem::EREGISTERED_HOME && callOnce)
+	if ( p_Modem->GetNetworkStatus() == SerialModem::EREGISTERED_HOME && 
+		!p_Modem->GetIsGPRSConnected() && !p_Modem->isBusy())
 	{
 		INFO("Registering GPRS now");
-		p_Modem->ConnectGPRS("internet", "", "", 3);
+		p_Modem->ConnectGPRS("m2mdev", "", "", 3);
 		callOnce = false;
 	}
+
 	// if (p_Modem->GetIsGPRSConnected())
 	// {
 	// 	if (millis() - lastDownload > waitTimeToDownloadAgain)
@@ -86,7 +87,8 @@ void loop()
 
 void InitHTTP()
 {
-	p_Modem->Enqueue(new SerialModem::Command("AT+HTTPINIT", "OK", 0, 100, [](std::smatch &s) { INFO("HTTP inited.")}));
+	p_Modem->Enqueue(new SerialModem::Command("AT+SAPBR=1,1", "OK", 3000, 1000, [](std::smatch &s) { INFO("HTTP bearer open.")}));
+	p_Modem->Enqueue(new SerialModem::Command("AT+HTTPINIT", "OK", 100, 100, [](std::smatch &s) { INFO("HTTP inited.")}));
 	p_Modem->Enqueue(new SerialModem::Command(
 		"AT+HTTPPARA=\"URL\",\"http://www.google.com\"", "OK",
 		0, 100
