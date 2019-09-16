@@ -24,7 +24,7 @@ public:
 				const char * _expects,
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
-				std::function<void(std::smatch*, char*)> _successCallback = nullptr,
+				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
 				std::function<void()> _failCallback = nullptr)
 		{
 			strcpy(command, _command);
@@ -39,7 +39,7 @@ public:
 				const char * _expects,
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
-				std::function<void(std::smatch*, char*)> _successCallback = nullptr,
+				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
 				std::function<void()> _failCallback = nullptr)
 		{
 			nextChain = new Command(
@@ -68,7 +68,7 @@ public:
 
 		unsigned int timeout;
 		unsigned int delay;
-		std::function<void(std::smatch*, char*)> successCallback;
+		std::function<void(std::smatch&, char*)> successCallback;
 		std::function<void()>			  failCallback;
 		char		 command[100];
 		char		 expects[100];
@@ -97,7 +97,7 @@ private:
 	{
 		CommandWait(const char * _expects, const char * _command, 
 			unsigned int _timeout,
-			std::function<void(std::smatch*, char* p_data)> _successCallback = nullptr, 
+			std::function<void(std::smatch&, char* p_data)> _successCallback = nullptr, 
 			std::function<void()> _failCallback = nullptr)
 		{
 			strcpy(expects, _expects);
@@ -116,7 +116,7 @@ private:
 
 		unsigned long lastTime;
 		unsigned int  timeout;
-		std::function<void(std::smatch*, char* p_data)> successCallback;
+		std::function<void(std::smatch&, char* p_data)> successCallback;
 		std::function<void()>			  failCallback;
 		char		  expects[100];
 		char		  command[100];
@@ -165,6 +165,8 @@ public:
 	{
 		return m_isBusy;
 	}
+	void 		SetPrefferedNetwork(ENetworkType net);
+	ENetworkType GetPrefferedNetwork();
 	~SerialModem()
 	{
 		vTaskDelete(m_task);

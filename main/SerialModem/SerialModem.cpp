@@ -31,6 +31,9 @@ void SerialModem::Loop()
 			
 			bool bcommonCmd = strcmp("AT+COPS?", (const char*)cmd->command) == 0;
 			bcommonCmd = bcommonCmd || strcmp("AT+CSQ", (const char*)cmd->command) == 0;
+			bcommonCmd = bcommonCmd || strcmp("AT+CNMP?", (const char*)cmd->command) == 0;
+			bcommonCmd = bcommonCmd || strcmp("ATE0", (const char*)cmd->command) == 0;
+
 			if (!bcommonCmd)
 			{
 				INFO("Executing this command %s", cmd->command);
@@ -63,12 +66,12 @@ void SerialModem::Loop()
 				Enqueue(new SerialModem::Command(
 					"AT+COPS?",
 					"([0-9]*),([0-9]*),\"(.*)?\",([0-9]*)", 0, 100,
-					[this](std::smatch  *m, char* p_data)
+					[this](std::smatch  &m, char* p_data)
 					{
-						if (m->length() > 4)
+						if (m.length() > 4)
 						{
-							int networkType = atoi((*m)[4].str().c_str());
-							m_providerName = (*m)[3].str().c_str();
+							int networkType = atoi(m[4].str().c_str());
+							m_providerName = m[3].str().c_str();
 							m_networkStatus = EREGISTERED_HOME;
 							switch (networkType)
 							{
@@ -85,6 +88,7 @@ void SerialModem::Loop()
 								m_netPreffered = EUNKNOWN;
 								break;
 							}
+							Enqueue(new Command("ATE0", "OK", 100,100));
 						}
 					},
 					[this]()
@@ -97,16 +101,32 @@ void SerialModem::Loop()
 				Enqueue(new SerialModem::Command(
 					"AT+CSQ",
 					"([0-9]*),([0-9]*)", 0, 100,
-					[this](std::smatch  *m, char* p_data)
+					[this](std::smatch  &m, char* p_data)
 					{
-						if (m->length() > 1)
+						if (m.length() > 1)
 						{
-							m_signal = atoi((*m)[1].str().c_str());
+							m_signal = atoi(m[1].str().c_str());
 						}
 					},
 					[this]()
 					{
 						m_signal = NAN;
+					}
+				));
+
+				Enqueue(new SerialModem::Command(
+					"AT+CNMP?",
+					"CNMP: ([0-9]*)", 0, 100,
+					[this](std::smatch  &m, char* p_data)
+					{
+						if (m.length() > 1)
+						{
+							m_netPreffered = (ENetworkType)atoi(m[1].str().c_str());
+						}
+					},
+					[this]()
+					{
+						m_netPreffered = EUNKNOWN;
 					}
 				));
 				lastTime = millis();	
@@ -120,7 +140,7 @@ void SerialModem::Loop()
 		{
 			if (!(*cmdw)->isAlreadyCalled)
 			{
-				std::smatch *p_matches = new std::smatch;
+				std::smatch &p_matches = *new std::smatch;
 				std::string serialResult;
 				serialResult.reserve(200);
 				std::regex expects((*cmdw)->expects);
@@ -144,7 +164,7 @@ void SerialModem::Loop()
 						m_isGprsReady  = false;
 					}
 
-					if (std::regex_search(serialResult, *p_matches, expects))
+					if (std::regex_search(serialResult, p_matches, expects))
 					{
 						(*cmdw)->isAlreadyCalled = true;
 						if ((*cmdw)->successCallback != nullptr)
@@ -171,7 +191,7 @@ void SerialModem::Loop()
 					alreadyCalled = (*cmdw)->isAlreadyCalled;
 
 				} while (millis() - timeNow < (*cmdw)->timeout && !alreadyCalled);
-				delete p_matches;				
+				delete &p_matches;				
 				if (!success)
 				{
 					(*cmdw)->isAlreadyCalled = true;
@@ -266,7 +286,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			"AT+CIPSHUT", 
 			"SHUT OK",
 			1000, 1000,
-			[this](std::smatch  *m, char* p_data)
+			[this](std::smatch  &m, char* p_data)
 			{
 				INFO("GPRS should be disconnected now");
 			},
@@ -276,7 +296,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		"AT+CGATT=0",
 		"OK",
 		5000, 3000,
-		[this](std::smatch  *m, char* p_data)
+		[this](std::smatch  &m, char* p_data)
 		{
 			INFO("deegistered to net");
 		},
@@ -285,7 +305,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		"AT+CGATT=1",
 		"OK",
 		5000, 3000,
-		[this](std::smatch  *m, char* p_data)
+		[this](std::smatch  &m, char* p_data)
 		{
 			INFO("Registered to net");
 		},
@@ -294,7 +314,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		"AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"",
 		"OK",
 		1000, 100,
-		[this](std::smatch  *m, char* p_data)
+		[this](std::smatch  &m, char* p_data)
 		{
 			INFO("Bearer set to GPRS");
 		},
@@ -303,7 +323,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		atSapbrApn.str().c_str(),
 		"OK",
 		1000, 100,
-		[this](std::smatch  *m, char* p_data)
+		[this](std::smatch  &m, char* p_data)
 		{
 			INFO("Bearer APN set");
 		},
@@ -312,7 +332,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		atSapbrUser.str().c_str(),
 		"OK",
 		1000, 200,
-		[this](std::smatch  *m, char* p_data)
+		[this](std::smatch  &m, char* p_data)
 		{
 			INFO("Bearer user set");
 		},
@@ -321,7 +341,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		atSapbrPass.str().c_str(),
 		"OK",
 		1000, 200,
-		[](std::smatch  *m, char* p_data) 
+		[](std::smatch  &m, char* p_data) 
 		{
 			INFO("Bearer pass set");
 		},
@@ -330,7 +350,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		gprsCmd.str().c_str(),
 		"OK",
 		1000, 500,
-		[](std::smatch  *m, char* p_data)
+		[](std::smatch  &m, char* p_data)
 		{
 			INFO("GPRS APN set");
 		},
@@ -339,7 +359,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		"AT+CIICR",
 		"OK",
 		10000, 3000,
-		[](std::smatch  *m, char* p_data) 
+		[](std::smatch  &m, char* p_data) 
 		{
 			INFO("OK, WAITING TO QUERY IP NOW");
 		},
@@ -348,21 +368,22 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		"AT+CIFSR",
 		"([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)",
 		10000, 10000,
-		[this](std::smatch  *m, char* p_data)
+		[this](std::smatch  &m, char* p_data)
 		{
 			m_isGprsReady = true;
 			m_ipaddr = IPAddress(
-			atoi((*m)[1].str().c_str()),
-			atoi((*m)[2].str().c_str()),
-			atoi((*m)[3].str().c_str()),
-			atoi((*m)[4].str().c_str()));
+				atoi(m[1].str().c_str()),
+				atoi(m[2].str().c_str()),
+				atoi(m[3].str().c_str()),
+				atoi(m[4].str().c_str())
+			);
 			INFO("IP address: %s", m_ipaddr.toString().c_str());
 			m_isBusy = false;
 			Enqueue(new SerialModem::Command(
 				"AT+SAPBR=1,1", 
 				"OK", 
 				0, 100, 
-				[](std::smatch  *s, char* p_data) { INFO("Bearer open!."); }
+				[](std::smatch  &s, char* p_data) { INFO("Bearer open!."); }
 			));
 		},
 		[this]()
@@ -404,4 +425,51 @@ void SerialModem::Begin(Stream *serialStream)
 		INFO("Modem not connected");
 	}
 
+}
+
+
+void SerialModem::SetPrefferedNetwork(ENetworkType net)
+{
+	std::string cmd = "AT+CNMP=";
+	switch (net)
+	{
+	case EGSM:
+		cmd += "13";
+		break;
+	case ENBIOT:
+		cmd += "38";
+		break;	
+	case ECATM:
+		cmd += "38";
+		break;
+	default:
+		break;
+	};
+
+	Command *c  = new Command(
+		cmd.c_str(),
+		"OK", 10000, 3000, nullptr, 
+		[](){ ERROR("Failed to switch network");  }
+	);
+	c->Chain(
+		"AT+CFUN=1,1",
+		"OK", 10000, 0, 
+		[=](std::smatch &s, char *p)
+		{
+			INFO("Success switched net!");	
+		}
+	);
+
+	if(net == ECATM)
+	{
+		//for catM//
+	}
+
+	Enqueue(c);
+	
+}
+
+SerialModem::ENetworkType SerialModem::GetPrefferedNetwork()
+{
+	return m_netPreffered;
 }

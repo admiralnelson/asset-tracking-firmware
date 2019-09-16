@@ -32,7 +32,7 @@ void setup()
 	WiFi.begin("TelkomUniversity");
 	hardwareSerial.begin(115200, SERIAL_8N1, RXD2, TXD2);
 	p_Modem->Begin(&hardwareSerial);
-
+	p_Modem->SetPrefferedNetwork(SerialModem::ENBIOT);
 	
 
 }
@@ -92,16 +92,16 @@ void InitHTTP()
 	 SerialModem::Command *p = new SerialModem::Command(
 		"AT+HTTPINIT", "OK", 
 		100, 100, 
-		[](std::smatch  *s, char* p_data) { INFO("HTTP inited.")},
+		[](std::smatch  &s, char* p_data) { INFO("HTTP inited.")},
 		[=]() 
 		{
 			 p_Modem->Enqueue(new SerialModem::Command(
 				"AT+HTTPTERM", 
 				"OK", 
 				200, 200, 
-				[=](std::smatch  *s, char* p_data) 
+				[=](std::smatch  &s, char* p_data) 
 				{ 
-					INFO("HTTP failed."); 
+					INFO("HTTP failed. Terminating now"); 
 				}
 			));
 		}	
@@ -116,14 +116,49 @@ void InitHTTP()
 		"AT+HTTPACTION=0", 
 		"OK\r\n",
 		20000, 1000,
-		[](std::smatch  *s, char* p_data) { INFO("Executed"); }
+		[](std::smatch  &s, char* p_data) { INFO("Executed"); }
 	)->Chain(
 		"", 
 		"HTTPACTION: ([0-9]+),([0-9]+),([0-9]+)",
-		60000, 1000,
-		[](std::smatch  *s, char* p_data) 
+		1000 * 120, 1000,
+		[=](std::smatch  &s, char* p_data) 
 		{ 
-			INFO("Http result: %d len: %d", atoi((*s)[2].str().c_str()), atoi((*s)[3].str().c_str()) ); 
+			INFO("Http result: %d len: %d", atoi(s[2].str().c_str()), atoi(s[3].str().c_str()) ); 
+			size_t dataLen =  atoi(s[3].str().c_str());
+			size_t endByte = 0;
+			size_t count = ceil(dataLen / 256);
+			for (size_t i = 0; i < count; i++)
+			{
+				std::stringstream strcmd;
+				size_t startingByte = 0;
+				if( i > 0)
+				{
+					char c[10];
+					itoa( i * 256, c , 10);
+					size_t len = strlen(c);
+					startingByte = 256 * i - (18 * i) ;
+				}
+				
+				endByte = 256 * ( i + 1 );
+				if(endByte > dataLen)
+				{
+					endByte = dataLen ;
+				}
+				
+				strcmd << "AT+HTTPREAD=" << startingByte << "," << endByte;		
+				SerialModem::Command *command1 = new SerialModem::Command(
+					strcmd.str().c_str(),
+					"HTTPREAD: ([0-9]*)\r\n",
+					1000, 1000,
+					[=](std::smatch  &s, char* p_data) 
+					{ 
+						unsigned int len = s[1].str().size();	
+						INFO("Msg content %s len %d", p_data, strlen(p_data)); 
+					}
+				);
+				p_Modem->Enqueue(command1);
+			}
+			
 		},
 		[=]() 
 		{ 
@@ -132,41 +167,14 @@ void InitHTTP()
 				"AT+HTTPTERM", 
 				"OK", 
 				200, 200, 
-				[](std::smatch  *s, char* p_data) { INFO("HTTP terminated."); }
-			));
-		}
-	)->Chain(
-		"AT+HTTPREAD=0,256",
-		"HTTPREAD: ([0-9]*)\r\n",
-		1000, 1000,
-		[=](std::smatch  *s, char* p_data) 
-		{ 
-			INFO("Msg content %s len %d", p_data, strlen(p_data)); 
-			p_Modem->Enqueue(new SerialModem::Command(
-				"AT+HTTPREAD=257,512",
-				"HTTPREAD: ([0-9]*)\r\n",
-				1000, 1000,
-				[](std::smatch  *s, char* p_data) 
-				{ 
-					INFO("Msg content part 2 %s len %d", p_data, strlen(p_data)); 
-				}
-			));
-		},
-		[=]()
-		{
-			ERROR("Timed out!");
-			p_Modem->Enqueue(new SerialModem::Command(
-				"AT+HTTPTERM", 
-				"OK", 
-				200, 200,
-				[](std::smatch  *s, char* p_data) { INFO("HTTP terminated."); }
+				[](std::smatch  &s, char* p_data) { INFO("HTTP terminated."); }
 			));
 		}
 	)->Chain(
 		"AT+HTTPTERM", 
 		"OK", 
 		200, 200,
-		[](std::smatch  *s, char* p_data) { INFO("HTTP terminated."); }
+		[](std::smatch  &s, char* p_data) { INFO("HTTP terminated."); }
 	);
 	p_Modem->Enqueue(p);
 }
