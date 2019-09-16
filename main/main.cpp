@@ -1,7 +1,7 @@
 #include "Arduino.h"
 #include <vector>
-#include <DebugUtils.h>
-#include <SerialModem.h>
+#include <../DebugUtils/DebugUtils.h>
+#include <../SerialModem/SerialModem.h>
 #include <functional>
 #include <regex>
 #include <WiFi.h>
@@ -32,6 +32,8 @@ void setup()
 	WiFi.begin("TelkomUniversity");
 	hardwareSerial.begin(115200, SERIAL_8N1, RXD2, TXD2);
 	p_Modem->Begin(&hardwareSerial);
+
+	
 
 }
 
@@ -73,53 +75,98 @@ void loop()
 		callOnce = false;
 	}
 
-	// if (p_Modem->GetIsGPRSConnected())
-	// {
-	// 	if (millis() - lastDownload > waitTimeToDownloadAgain)
-	// 	{
-	// 		INFO("DOWNLOAD PAGE");
-	// 		lastDownload = millis();
-	// 		InitHTTP();
-	// 	}
-	// }
+	if (p_Modem->GetIsGPRSConnected())
+	{
+	 	if (millis() - lastDownload > waitTimeToDownloadAgain)
+	 	{
+	 		INFO("DOWNLOAD PAGE");
+	 		lastDownload = millis();
+	 		InitHTTP();
+	 	}
+	}
 }
 
 
 void InitHTTP()
 {
-	p_Modem->Enqueue(new SerialModem::Command("AT+SAPBR=1,1", "OK", 3000, 1000, [](std::smatch &s) { INFO("HTTP bearer open.")}));
-	p_Modem->Enqueue(new SerialModem::Command("AT+HTTPINIT", "OK", 100, 100, [](std::smatch &s) { INFO("HTTP inited.")}));
-	p_Modem->Enqueue(new SerialModem::Command(
-		"AT+HTTPPARA=\"URL\",\"http://www.google.com\"", "OK",
+	 SerialModem::Command *p = new SerialModem::Command(
+		"AT+HTTPINIT", "OK", 
+		100, 100, 
+		[](std::smatch  *s, char* p_data) { INFO("HTTP inited.")},
+		[=]() 
+		{
+			 p_Modem->Enqueue(new SerialModem::Command(
+				"AT+HTTPTERM", 
+				"OK", 
+				200, 200, 
+				[=](std::smatch  *s, char* p_data) 
+				{ 
+					INFO("HTTP failed."); 
+				}
+			));
+		}	
+	);
+	p->Chain(
+		"AT+HTTPPARA=\"URL\",\"http://example.com/\"", "OK",
 		0, 100
-	));
-	p_Modem->Enqueue(new SerialModem::Command(
+	)->Chain(
 		"AT+HTTPPARA=\"CID\",1", "OK",
 		0, 100
-	));
-	
-	p_Modem->Enqueue(new 
-		SerialModem::Command(
-			"AT+HTTPACTION=0", 
-			"OK\r\n",
-			20000, 1000,
-			[](std::smatch &s) { INFO("Executed"); }
-	));
-
-	p_Modem->Enqueue(new
-		SerialModem::Command(
-			"AT+HTTPREAD",
-			"HTTPREAD: ([0-9]*)\r\n((.|\r\n)*)",
-			1000, 1000,
-			[](std::smatch &s) 
-			{ 
-				INFO("Msg content %s", s[0].str().c_str()); 
-			},
-			[]()
-			{
-				ERROR("Timed out!");
-			}
-	));
-	p_Modem->Enqueue(new SerialModem::Command("AT+HTTPTERM", "OK", 0, 100, [](std::smatch &s) { INFO("HTTP inited.")}));
-
+	)->Chain(
+		"AT+HTTPACTION=0", 
+		"OK\r\n",
+		20000, 1000,
+		[](std::smatch  *s, char* p_data) { INFO("Executed"); }
+	)->Chain(
+		"", 
+		"HTTPACTION: ([0-9]+),([0-9]+),([0-9]+)",
+		60000, 1000,
+		[](std::smatch  *s, char* p_data) 
+		{ 
+			INFO("Http result: %d len: %d", atoi((*s)[2].str().c_str()), atoi((*s)[3].str().c_str()) ); 
+		},
+		[=]() 
+		{ 
+			INFO("Timed out!"); 
+			p_Modem->Enqueue(new SerialModem::Command(
+				"AT+HTTPTERM", 
+				"OK", 
+				200, 200, 
+				[](std::smatch  *s, char* p_data) { INFO("HTTP terminated."); }
+			));
+		}
+	)->Chain(
+		"AT+HTTPREAD=0,256",
+		"HTTPREAD: ([0-9]*)\r\n",
+		1000, 1000,
+		[=](std::smatch  *s, char* p_data) 
+		{ 
+			INFO("Msg content %s len %d", p_data, strlen(p_data)); 
+			p_Modem->Enqueue(new SerialModem::Command(
+				"AT+HTTPREAD=257,512",
+				"HTTPREAD: ([0-9]*)\r\n",
+				1000, 1000,
+				[](std::smatch  *s, char* p_data) 
+				{ 
+					INFO("Msg content part 2 %s len %d", p_data, strlen(p_data)); 
+				}
+			));
+		},
+		[=]()
+		{
+			ERROR("Timed out!");
+			p_Modem->Enqueue(new SerialModem::Command(
+				"AT+HTTPTERM", 
+				"OK", 
+				200, 200,
+				[](std::smatch  *s, char* p_data) { INFO("HTTP terminated."); }
+			));
+		}
+	)->Chain(
+		"AT+HTTPTERM", 
+		"OK", 
+		200, 200,
+		[](std::smatch  *s, char* p_data) { INFO("HTTP terminated."); }
+	);
+	p_Modem->Enqueue(p);
 }

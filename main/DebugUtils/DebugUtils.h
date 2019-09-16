@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <Arduino.h>
 using cstr = const char * const;
 
 static constexpr cstr past_last_slash(cstr str, cstr last_slash)

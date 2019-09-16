@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
-#include <DebugUtils.h>
 #include <regex>
 #include <iostream>
 #include <queue>
@@ -11,6 +10,11 @@
 #include <sstream>
 #include <algorithm>
 #include <functional>
+#include <../DebugUtils/DebugUtils.h>
+
+#define MAX_BUFFER 8024
+#define REFRESH_RATE_MS 3000
+
 class SerialModem
 {
 public:
@@ -20,7 +24,7 @@ public:
 				const char * _expects,
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
-				std::function<void(std::smatch&)> _successCallback = nullptr,
+				std::function<void(std::smatch*, char*)> _successCallback = nullptr,
 				std::function<void()> _failCallback = nullptr)
 		{
 			strcpy(command, _command);
@@ -29,35 +33,47 @@ public:
 			failCallback	= _failCallback;
 			timeout = _timeout;
 			delay = _delay;
-
 		}
 
-		Command	*Chain(Command *cmd)
+		Command	*Chain(const char * _command, 
+				const char * _expects,
+				unsigned int _timeout = 0,
+				unsigned int _delay = 0,
+				std::function<void(std::smatch*, char*)> _successCallback = nullptr,
+				std::function<void()> _failCallback = nullptr)
 		{
-			nextChain = cmd;
-			return this;
+			nextChain = new Command(
+				_command, _expects, _timeout, _delay, _successCallback, _failCallback
+			);
+			return nextChain;
 		}
 
 		void DestroyChain()
 		{
-			if (nextChain != nullptr)
-			{
-				delete nextChain;
-			}
+			m_isDeletingNext = true;
+			delete this;
 		}
 
 		~Command()
 		{
-			DestroyChain();
+			if(m_isDeletingNext)
+			{
+				if(nextChain != nullptr)
+				{
+					nextChain->m_isDeletingNext = true;
+					delete nextChain;
+				}
+			}
 		}
 
 		unsigned int timeout;
 		unsigned int delay;
-		std::function<void(std::smatch&)> successCallback;
+		std::function<void(std::smatch*, char*)> successCallback;
 		std::function<void()>			  failCallback;
 		char		 command[100];
 		char		 expects[100];
-		Command		*nextChain = nullptr;
+		Command		*nextChain = nullptr;	
+		bool		m_isDeletingNext = false; 
 	};
 
 	enum ENetworkStatus
@@ -81,7 +97,7 @@ private:
 	{
 		CommandWait(const char * _expects, const char * _command, 
 			unsigned int _timeout,
-			std::function<void(std::smatch&)> _successCallback = nullptr, 
+			std::function<void(std::smatch*, char* p_data)> _successCallback = nullptr, 
 			std::function<void()> _failCallback = nullptr)
 		{
 			strcpy(expects, _expects);
@@ -100,7 +116,7 @@ private:
 
 		unsigned long lastTime;
 		unsigned int  timeout;
-		std::function<void(std::smatch&)> successCallback;
+		std::function<void(std::smatch*, char* p_data)> successCallback;
 		std::function<void()>			  failCallback;
 		char		  expects[100];
 		char		  command[100];
@@ -119,10 +135,12 @@ private:
 	TaskHandle_t		 m_task;
 	IPAddress			 m_ipaddr;
 	ENetworkType		 m_netPreffered;
+	char				 *m_serialBuffer;
 	bool				 m_isReady	   = false;
 	bool				 m_isGprsReady = false;
 	bool 				 m_isIgnoringNetState = false;
 	bool 				 m_isBusy = false;
+	
 public:
 	SerialModem();
 	SerialModem(bool bIgnoreNetState);
@@ -147,20 +165,33 @@ public:
 	{
 		return m_isBusy;
 	}
-	~SerialModem();
+	~SerialModem()
+	{
+		vTaskDelete(m_task);
+		delete []m_serialBuffer;
+	}
 
 private:
 	void		Loop();
 	static void StartTaskImplLoop(void*);
 
-	const char  *ReadSerial()
+	const char* ReadSerial()
 	{
-		std::string out;
+		int i = 0;
+		memset(m_serialBuffer, 0, sizeof(char) * MAX_BUFFER);
 		while (m_serialStream->available())
 		{
-			out += (char)m_serialStream->read();
+			if(i < MAX_BUFFER)
+			{
+				unsigned char c =(unsigned char) m_serialStream->read();
+				if(c > 0)
+				{
+					m_serialBuffer[i] += c ;					
+				}
+				i++;
+			}
 		}
-		return out.c_str();
+		return  m_serialBuffer;
 	}
 
 

@@ -1,4 +1,5 @@
-set(COMPONENT_SRCS "main.cpp" "SerialModem/SerialModem.cpp" "SerialModem/DebugUtils.cpp")
+set(COMPONENT_SRCS "main.cpp" "SerialModem/SerialModem.cpp" "DebugUtils/DebugUtils.cpp")
+set(COMPONENT_ADD_INCLUDEDIRS "DebugUtils")
 set(COMPONENT_ADD_INCLUDEDIRS "SerialModem")
-
+set(COMPONENT_ADD_INCLUDEDIRS "HttpSimcom")
 register_component()
