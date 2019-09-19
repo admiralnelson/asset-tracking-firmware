@@ -13,6 +13,7 @@
 #include <../DebugUtils/DebugUtils.h>
 
 #define MAX_BUFFER 8024
+#define MAX_RETRY 20
 #define REFRESH_RATE_MS 3000
 
 class SerialModem

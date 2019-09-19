@@ -400,7 +400,7 @@ void SerialModem::Begin(Stream *serialStream)
 	m_serialStream = serialStream;
 	bool notReady = true;
 	int trial = 0;
-	while (notReady && trial < 10)
+	while (notReady && trial < MAX_RETRY)
 	{
 		m_serialStream->println("AT");
 		std::string s = ReadSerial();
@@ -410,7 +410,7 @@ void SerialModem::Begin(Stream *serialStream)
 		delay(200);
 		trial++;
 	}
-	if (trial < 10)
+	if (trial < MAX_RETRY)
 	{
 		m_isReady = true;
 		INFO("Modem is ready!");

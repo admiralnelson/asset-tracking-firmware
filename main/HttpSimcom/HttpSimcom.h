@@ -1,9 +1,12 @@
 #include <../DebugUtils/DebugUtils.h>
 #include <../SerialModem/SerialModem.h>
+#include <sstream>
 #include <string>
 #include <map>
 #include <functional>
 #include <regex>
+#include <queue>
+#include <memory>
 #include <queue>
 class HttpSimcom
 {
@@ -77,7 +80,10 @@ public:
         Not_HTTP_Pdu = 600,
         No_Memory    = 602,
         DNS_Error    = 603,
-        Stack_Busy   = 604
+        Stack_Busy   = 604,
+
+        Init_Failed  = 700,
+        Timeout      = 701
     };
 
     enum ActionHttp
@@ -96,15 +102,25 @@ public:
         std::map<std::string, std::string> header;
     };
 
-private:
     struct HttpResponse
     {
-        std::string data;
-        const HttpStatusCode code;
+        std::shared_ptr<char> data;
+        HttpStatusCode code;
+        unsigned long timeTaken = 0;
         bool isGotReply()
         {
             return code > 599;
         }
+    };
+
+private:
+    struct HttpQueue
+    {
+        unsigned int id;
+        unsigned long timeStart;
+        unsigned long timeEnd;
+        HttpStatusCode status;
+        std::shared_ptr<char> p_dataOutput;
     };
 
 public:
@@ -114,12 +130,37 @@ public:
     }
     void HttpDo(HttpRequest req, 
                 std::function<void(HttpResponse &)> callbackSuccess,
-                std::function<void(HttpResponse &)> callbackFail);
+                std::function<void(HttpResponse &)> callbackFail,
+                unsigned int timeout = 60);
     bool InternetTest();
 
     ~HttpSimcom();
 
 private:
-    SerialModem *m_serialModem;
+    void ShiftStringLeft(char *string,int shiftLength)
+    {
+
+        int i = 0;
+        int size=strlen(string);
+        if(shiftLength >= size)
+        {
+            memset(string,0 ,size);
+            return;
+        }
+
+        for (i=0; i < size-shiftLength; i++)
+        {
+            string[i] = string[i + shiftLength];
+            string[i + shiftLength] = 0;
+        }
+    }
+    unsigned GetNumberOfDigits (unsigned i)
+    {
+        return i > 0 ? (int) log10 ((double) i) + 1 : 1;
+    }
+
+    SerialModem           *m_serialModem;
+    std::queue<HttpQueue> m_queue;
+    unsigned int          m_counter;
 };
 

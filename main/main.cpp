@@ -2,19 +2,21 @@
 #include <vector>
 #include <../DebugUtils/DebugUtils.h>
 #include <../SerialModem/SerialModem.h>
+#include <../HttpSimcom/HttpSimcom.h>
 #include <functional>
 #include <regex>
 #include <WiFi.h>
 #include <string>
 #include <HardwareSerial.h>
 #include <functional>
-
+#include <map>
 #define RXD2 16
 #define TXD2 17
 
 //AsyncModem::SIM7000 *p_Modem = new AsyncModem::SIM7000();
 
 SerialModem *p_Modem = new SerialModem();
+HttpSimcom *p_http;
 
 HardwareSerial hardwareSerial(2);
 
@@ -22,7 +24,7 @@ void InitHTTP();
 
 void setup() 
 {
-	Serial.begin(9600);
+	Serial.begin(115200);
 	Serial.print("test 123\n");
 	int wifi = WiFi.scanNetworks();
 	for (int i = 0; i < wifi; i++)
@@ -32,8 +34,8 @@ void setup()
 	WiFi.begin("TelkomUniversity");
 	hardwareSerial.begin(115200, SERIAL_8N1, RXD2, TXD2);
 	p_Modem->Begin(&hardwareSerial);
-	p_Modem->SetPrefferedNetwork(SerialModem::ENBIOT);
-	
+	p_Modem->SetPrefferedNetwork(SerialModem::EGSM);
+	p_http = new HttpSimcom(*p_Modem); 
 
 }
 
@@ -81,7 +83,27 @@ void loop()
 	 	{
 	 		INFO("DOWNLOAD PAGE");
 	 		lastDownload = millis();
-	 		InitHTTP();
+	 		HttpSimcom::HttpRequest req;
+			req.url = "http://scooterlabs.com/echo";
+			std::map<std::string, std::string> header = {
+				{"Authorization","test"},
+				{"Content-type","application/json"}
+			};
+			req.header = header;
+			req.action = HttpSimcom::ActionHttp::Get;
+			p_http->HttpDo(req, 
+				[](HttpSimcom::HttpResponse &r)
+				{
+					INFO("SUCCESS!");
+					INFO("CODE %d, TIME %lu, DATA %s", r.code, r.timeTaken, r.data.get());
+				},
+				[](HttpSimcom::HttpResponse &r)
+				{
+					INFO("FAILED, due to network or param error");
+					INFO("code %d", r.code);
+				}
+			);
+			 //InitHTTP();
 	 	}
 	}
 }
