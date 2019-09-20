@@ -104,7 +104,7 @@ public:
 
     struct HttpResponse
     {
-        std::shared_ptr<char> data;
+        char *data;
         HttpStatusCode code;
         unsigned long timeTaken = 0;
         bool isGotReply()

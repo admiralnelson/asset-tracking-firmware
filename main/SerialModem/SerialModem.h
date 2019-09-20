@@ -5,14 +5,14 @@
 #include <freertos/semphr.h>
 #include <regex>
 #include <iostream>
-#include <queue>
+#include <deque>
 #include <string>
 #include <sstream>
 #include <algorithm>
 #include <functional>
 #include <../DebugUtils/DebugUtils.h>
 
-#define MAX_BUFFER 8024
+#define MAX_BUFFER 257
 #define MAX_RETRY 20
 #define REFRESH_RATE_MS 3000
 
@@ -26,7 +26,7 @@ public:
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
 				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
-				std::function<void()> _failCallback = nullptr)
+				std::function<void()> _failCallback = nullptr, bool _doItUntilSuccess = false)
 		{
 			strcpy(command, _command);
 			strcpy(expects, _expects);
@@ -34,6 +34,7 @@ public:
 			failCallback	= _failCallback;
 			timeout = _timeout;
 			delay = _delay;
+			m_isDoitUntilSuccess = _doItUntilSuccess;
 		}
 
 		Command	*Chain(const char * _command, 
@@ -41,10 +42,10 @@ public:
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
 				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
-				std::function<void()> _failCallback = nullptr)
+				std::function<void()> _failCallback = nullptr,bool _doItUntilSuccess = false)
 		{
 			nextChain = new Command(
-				_command, _expects, _timeout, _delay, _successCallback, _failCallback
+				_command, _expects, _timeout, _delay, _successCallback, _failCallback, _doItUntilSuccess
 			);
 			return nextChain;
 		}
@@ -75,6 +76,7 @@ public:
 		char		 expects[100];
 		Command		*nextChain = nullptr;	
 		bool		m_isDeletingNext = false; 
+		bool		m_isDoitUntilSuccess = false;
 	};
 
 	enum ENetworkStatus
@@ -130,7 +132,7 @@ private:
 	std::string			m_internetUsername;
 	std::string			m_internetPassword;
 	std::string			m_providerName;
-	std::queue<Command*> m_cmdsQueue;
+	std::deque<Command*> m_cmdsQueue;
 	std::vector<CommandWait*> m_cmdWaitingList;
 	Stream				 *m_serialStream;
 	TaskHandle_t		 m_task;
@@ -147,6 +149,7 @@ public:
 	SerialModem(bool bIgnoreNetState);
 	void	Begin(Stream *serialStream);
 	void	Enqueue(Command* cmd);
+	void	EnqueueFront(Command* cmd);
 	int		GetSignal();
 	const char	 *GetProviderName();
 	void		 ConnectGPRS(const char * apn,const char *username, const char *pass, unsigned int retry);
@@ -177,7 +180,6 @@ public:
 private:
 	void		Loop();
 	static void StartTaskImplLoop(void*);
-
 	const char* ReadSerial()
 	{
 		int i = 0;
@@ -192,6 +194,10 @@ private:
 					m_serialBuffer[i] += c ;					
 				}
 				i++;
+			}
+			else
+			{
+				return  m_serialBuffer;
 			}
 		}
 		return  m_serialBuffer;

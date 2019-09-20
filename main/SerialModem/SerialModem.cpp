@@ -1,4 +1,5 @@
 #include "SerialModem.h"
+
 SerialModem::SerialModem()
 {
 	m_serialBuffer = new char[MAX_BUFFER];
@@ -56,8 +57,10 @@ void SerialModem::Loop()
 			{
 				INFO("Write procedure was halted by %d", cmd->delay);
 			}
-			
-			m_cmdsQueue.pop();
+			if(!cmd->m_isDoitUntilSuccess)
+			{
+				m_cmdsQueue.pop_front();				
+			}
 		}
 		else
 		{
@@ -142,14 +145,14 @@ void SerialModem::Loop()
 			{
 				std::smatch &p_matches = *new std::smatch;
 				std::string serialResult;
-				serialResult.reserve(200);
+				serialResult.reserve(MAX_BUFFER);
 				std::regex expects((*cmdw)->expects);
 				int timeNow = millis();
 				bool success = false;
 				bool alreadyCalled = (*cmdw)->isAlreadyCalled;
 				do
 				{
-					serialResult += ReadSerial();
+					serialResult = ReadSerial();
 					/*bool bcommonCmd = strcmp("AT+COPS?", (const char*)(*cmdw)->command) == 0;
 					bcommonCmd = bcommonCmd || strcmp("AT+CSQ", (const char*)(*cmdw)->command) == 0;
 					if (!bcommonCmd && serialResult.size() > 0)
@@ -176,6 +179,10 @@ void SerialModem::Loop()
 							// 	INFO("Current serial data (truncated) %s", serialResult.c_str());
 							// }
 							(*cmdw)->successCallback(p_matches, m_serialBuffer);
+							if(cmd->m_isDoitUntilSuccess)
+							{
+								m_cmdsQueue.pop_front();
+							}
 						}
 						success = true;
 						if(cmd->nextChain != nullptr)
@@ -188,7 +195,8 @@ void SerialModem::Loop()
 					alreadyCalled = (*cmdw)->isAlreadyCalled;
 
 				} while (millis() - timeNow < (*cmdw)->timeout && !alreadyCalled);
-				delete &p_matches;				
+				delete &p_matches;	
+
 				if (!success)
 				{
 					(*cmdw)->isAlreadyCalled = true;
@@ -197,7 +205,14 @@ void SerialModem::Loop()
 						(*cmdw)->failCallback();
 					}
 					ERROR("None match for command (truncated) %s -> %s", (*cmdw)->command, serialResult.c_str());
-					cmd->DestroyChain();
+					if(cmd->m_isDoitUntilSuccess)
+					{
+						INFO("Redoing for command, %s", cmd->command);
+					}
+					else
+					{
+						cmd->DestroyChain();					
+					}
 				}
 			}
 		}
@@ -238,7 +253,12 @@ void SerialModem::StartTaskImplLoop(void * thisObject)
 
 void SerialModem::Enqueue(Command *cmd)
 {
-	m_cmdsQueue.push(cmd);
+	m_cmdsQueue.push_back(cmd);
+}
+
+void SerialModem::EnqueueFront(Command *cmd)
+{
+	m_cmdsQueue.push_front(cmd);
 }
 
 int SerialModem::GetSignal()

@@ -84,7 +84,7 @@ void loop()
 	 		INFO("DOWNLOAD PAGE");
 	 		lastDownload = millis();
 	 		HttpSimcom::HttpRequest req;
-			req.url = "http://pastebin.com/raw/TUtLdNHZ";
+			req.url = "http://scooterlabs.com/echo";
 			std::map<std::string, std::string> header = {
 				{"Authorization","test"}
 			};
@@ -94,7 +94,7 @@ void loop()
 				[](HttpSimcom::HttpResponse &r)
 				{
 					INFO("SUCCESS!");
-					INFO("CODE %d, TIME %lu, DATA %s", r.code, r.timeTaken, r.data.get());
+					INFO("CODE %d, TIME %lu, DATA %s", r.code, r.timeTaken, r.data);
 				},
 				[](HttpSimcom::HttpResponse &r)
 				{
