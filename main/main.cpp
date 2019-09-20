@@ -84,10 +84,9 @@ void loop()
 	 		INFO("DOWNLOAD PAGE");
 	 		lastDownload = millis();
 	 		HttpSimcom::HttpRequest req;
-			req.url = "http://scooterlabs.com/echo";
+			req.url = "http://pastebin.com/raw/TUtLdNHZ";
 			std::map<std::string, std::string> header = {
-				{"Authorization","test"},
-				{"Content-type","application/json"}
+				{"Authorization","test"}
 			};
 			req.header = header;
 			req.action = HttpSimcom::ActionHttp::Get;

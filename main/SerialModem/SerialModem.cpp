@@ -182,10 +182,7 @@ void SerialModem::Loop()
 						{
 							Enqueue(cmd->nextChain);
 						}
-						else
-						{
-							delete cmd;
-						}
+						delete cmd;
 						//INFO("SUCCESS! isAlreadyCalled %d", (*cmdw)->isAlreadyCalled);
 					}
 					alreadyCalled = (*cmdw)->isAlreadyCalled;
