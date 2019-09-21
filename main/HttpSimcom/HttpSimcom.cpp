@@ -19,6 +19,8 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			HttpQueue q;
 			q.id = m_counter;
 			q.timeStart = millis();
+			q.callFail = callbackFail;
+			q.callSuccess = callbackSuccess;
 			m_queue.push(q);
 		},
 		[=]() 
@@ -32,9 +34,12 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					INFO("HTTP failed. Terminating now"); 
                     HttpResponse res;
 					res.code = HttpStatusCode::Init_Failed;
-					callbackFail(res);
 					if(m_queue.size() > 0)
+					{
+						HttpQueue &q = m_queue.front();
+						q.callFail(res);
 						m_queue.pop();
+					}
 				}
 			));
 		}	
@@ -47,9 +52,13 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			INFO("Failed to fill parameter. Check URL");
 			HttpResponse res;
 			res.code = HttpStatusCode::Init_Failed;
-			callbackFail(res);
+			
 			if(m_queue.size() > 0)
+			{
+				HttpQueue &q = m_queue.front();
+				q.callFail(res);
 				m_queue.pop();
+			}
 		}
 	)->Chain(
 		httpParaTimeout.str().c_str(),"OK",
@@ -59,9 +68,13 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			INFO("Failed to fill parameter. Check timeout value");
 			HttpResponse res;
 			res.code = HttpStatusCode::Init_Failed;
-			callbackFail(res);
 			if(m_queue.size() > 0)
+			{
+				HttpQueue &q = m_queue.front();			
+				q.callFail(res);
 				m_queue.pop();
+			}
+			
 		}
 	)->Chain(
 		"AT+HTTPPARA=\"CID\",1", "OK",
@@ -79,9 +92,13 @@ void HttpSimcom::HttpDo(HttpRequest req,
 				INFO("Failed to fill parameter. Check timeout value");
 				HttpResponse res;
 				res.code = HttpStatusCode::Init_Failed;
-				callbackFail(res);
+				
 				if(m_queue.size() > 0)
+				{
+					HttpQueue &q = m_queue.front();				
+					q.callFail(res);
 					m_queue.pop();
+				}
 			}
 		);
 		httpParaUserHeader.clear();
@@ -105,7 +122,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			HttpQueue &q = m_queue.front();
 			q.timeEnd = millis();
 			q.status = (HttpStatusCode) atoi(s[2].str().c_str());
-			
+			q.length = dataLen;
 			if(dataLen == 0) 
 			{
 				q.p_dataOutput = new char[2];//std::shared_ptr<char>(new char[2], std::default_delete<char[]>());
@@ -165,10 +182,12 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			INFO("Timed out!"); 
 			HttpResponse res;
 			res.code = HttpStatusCode::Timeout;
-			
-			callbackFail(res);
 			if(m_queue.size() > 0)
+			{
+				HttpQueue &q = m_queue.front();
+				q.callFail(res);
 				m_queue.pop();
+			}
 			m_serialModem->Enqueue(new SerialModem::Command(
 				"AT+HTTPTERM", 
 				"OK", 
@@ -186,14 +205,18 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		[=](std::smatch  &s, char* p_data)
 		{ 
 			HttpResponse res;
-			HttpQueue &q = m_queue.front();
+			HttpQueue q = m_queue.front();
+			INFO("POINTER %p", q.p_dataOutput);
+			INFO("DATA FIRST CHAR %c", q.p_dataOutput[0]);
+			INFO("DATA LAST CHAR %c", q.p_dataOutput[q.length - 1]);
+
 			res.code = q.status;
-			res.data = (const char*) q.p_dataOutput;
-			res.timeTaken = q.timeEnd - q.timeStart;
-			callbackSuccess(res);
+			res.data = static_cast<const char*>(q.p_dataOutput);
+			res.timeTaken = q.timeEnd - q.timeStart;	
+			res.length = q.length;		
+			q.callSuccess(res);
 			delete []q.p_dataOutput;
-			if(m_queue.size() > 0)
-				m_queue.pop();
+			m_queue.pop();
 			INFO("HTTP terminated succesfully."); 
 		}
 	);

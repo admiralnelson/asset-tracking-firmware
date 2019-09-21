@@ -93,7 +93,12 @@ void loop()
 				[](HttpSimcom::HttpResponse &r)
 				{
 					INFO("SUCCESS!");
-					INFO("CODE %d, TIME %lu, Freemem %d B, DATA: \n%s ", r.code, r.timeTaken, ESP.getFreeHeap() ,r.data);
+					INFO("CODE %d, TIME %lu, Freemem %d B ", r.code, r.timeTaken, ESP.getFreeHeap());
+					int showInHalf = r.length / 2;
+					int otherHalf = r.length - showInHalf;
+					INFO("DATA \n%.*s", showInHalf , r.data);
+					INFO("DATA \n%.*s", otherHalf , r.data + showInHalf);
+
 				},
 				[](HttpSimcom::HttpResponse &r)
 				{

@@ -108,6 +108,7 @@ public:
     struct HttpResponse
     {
         const char *data;
+        size_t length;
         HttpStatusCode code;
         unsigned long timeTaken = 0;
         bool isGotReply()
@@ -123,6 +124,9 @@ private:
         unsigned long timeStart;
         unsigned long timeEnd;
         HttpStatusCode status;
+        size_t length;
+        std::function<void(HttpResponse &)> callSuccess;
+        std::function<void(HttpResponse &)> callFail;
         char* p_dataOutput;
     };
 
