@@ -95,7 +95,7 @@ public:
 		ENBIOT
 	};
 
-private:
+protected:
 	struct CommandWait
 	{
 		CommandWait(const char * _expects, const char * _command, 
@@ -133,6 +133,7 @@ private:
 	std::string			m_internetPassword;
 	std::string			m_providerName;
 	std::deque<Command*> m_cmdsQueue;
+	std::deque<Command*> m_onHoldQueue;
 	std::vector<CommandWait*> m_cmdWaitingList;
 	Stream				 *m_serialStream;
 	TaskHandle_t		 m_task;
@@ -149,7 +150,7 @@ public:
 	SerialModem(bool bIgnoreNetState);
 	void	Begin(Stream *serialStream);
 	void	Enqueue(Command* cmd);
-	void	EnqueueFront(Command* cmd);
+	void	ForceEnqueue(Command* cmd);
 	int		GetSignal();
 	const char	 *GetProviderName();
 	void		 ConnectGPRS(const char * apn,const char *username, const char *pass, unsigned int retry);
@@ -177,7 +178,7 @@ public:
 		delete []m_serialBuffer;
 	}
 
-private:
+protected:
 	void		Loop();
 	static void StartTaskImplLoop(void*);
 	const char* ReadSerial()

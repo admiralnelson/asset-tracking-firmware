@@ -53,8 +53,7 @@ void loop()
 {
 	//p_Modem->Loop();
 	delay(1000);
-	if(prevSignal != p_Modem->GetSignal() || 
-	   gprsIsConnected != p_Modem->GetIsGPRSConnected() )
+	if(true )
 	{
 		int freeRAM = ESP.getFreeHeap();
 
@@ -84,7 +83,7 @@ void loop()
 	 		INFO("DOWNLOAD PAGE");
 	 		lastDownload = millis();
 	 		HttpSimcom::HttpRequest req;
-			req.url = "http://scooterlabs.com/echo";
+			req.url = "http://pastebin.com/raw/TUtLdNHZ";
 			std::map<std::string, std::string> header = {
 				{"Authorization","test"}
 			};
@@ -94,7 +93,7 @@ void loop()
 				[](HttpSimcom::HttpResponse &r)
 				{
 					INFO("SUCCESS!");
-					INFO("CODE %d, TIME %lu, DATA %s", r.code, r.timeTaken, r.data);
+					INFO("CODE %d, TIME %lu, Freemem %d B, DATA: \n%s ", r.code, r.timeTaken, ESP.getFreeHeap() ,r.data);
 				},
 				[](HttpSimcom::HttpResponse &r)
 				{

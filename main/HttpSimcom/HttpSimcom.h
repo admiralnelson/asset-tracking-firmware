@@ -8,6 +8,9 @@
 #include <queue>
 #include <memory>
 #include <queue>
+
+#define MAX_READ 200
+
 class HttpSimcom
 {
 public:
@@ -104,7 +107,7 @@ public:
 
     struct HttpResponse
     {
-        char *data;
+        const char *data;
         HttpStatusCode code;
         unsigned long timeTaken = 0;
         bool isGotReply()
@@ -120,7 +123,7 @@ private:
         unsigned long timeStart;
         unsigned long timeEnd;
         HttpStatusCode status;
-        std::shared_ptr<char> p_dataOutput;
+        char* p_dataOutput;
     };
 
 public:

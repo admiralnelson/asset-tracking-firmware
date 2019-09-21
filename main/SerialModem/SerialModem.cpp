@@ -13,9 +13,9 @@ SerialModem::SerialModem(bool bIgnoreNetState)
 
 void SerialModem::Loop()
 {
-	std::string providerName = "Unknown";
 	static unsigned int lastTime = 0 ;
 	Command* cmd = nullptr;
+
 	while (true)
 	{
 		if (!m_isReady)
@@ -187,7 +187,14 @@ void SerialModem::Loop()
 						success = true;
 						if(cmd->nextChain != nullptr)
 						{
-							Enqueue(cmd->nextChain);
+							//we entered chained mode, 
+							m_isBusy = true;
+							ForceEnqueue(cmd->nextChain);
+						}
+						else
+						{
+							//we exited chained mode, 
+							m_isBusy = false;
 						}
 						delete cmd;
 						//INFO("SUCCESS! isAlreadyCalled %d", (*cmdw)->isAlreadyCalled);
@@ -211,7 +218,9 @@ void SerialModem::Loop()
 					}
 					else
 					{
-						cmd->DestroyChain();					
+						cmd->DestroyChain();
+						//we exited chained mode, 
+						m_isBusy = false;					
 					}
 				}
 			}
@@ -230,10 +239,13 @@ void SerialModem::Loop()
 			}
 		}
 
+		if(m_onHoldQueue.size() > 0 && !m_isBusy)
 		{
-			// m_signal = signalStrength;
-			// m_providerName = providerName;
-			// m_netPreffered = prefferedNet;
+			while(m_onHoldQueue.size() > 0)
+			{
+				Enqueue(m_onHoldQueue.front());
+				m_onHoldQueue.pop_front();
+			}
 		}
 
 	}
@@ -249,16 +261,21 @@ void SerialModem::StartTaskImplLoop(void * thisObject)
 }
 
 
-
-
 void SerialModem::Enqueue(Command *cmd)
 {
-	m_cmdsQueue.push_back(cmd);
+	if(!m_isBusy)
+	{
+		m_cmdsQueue.push_back(cmd);
+	}
+	else
+	{
+		m_onHoldQueue.push_back(cmd);
+	}
 }
 
-void SerialModem::EnqueueFront(Command *cmd)
+void SerialModem::ForceEnqueue(Command *cmd)
 {
-	m_cmdsQueue.push_front(cmd);
+	m_cmdsQueue.push_back(cmd);
 }
 
 int SerialModem::GetSignal()
@@ -396,7 +413,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			);
 			INFO("IP address: %s", m_ipaddr.toString().c_str());
 			m_isBusy = false;
-			Enqueue(new SerialModem::Command(
+			ForceEnqueue(new SerialModem::Command(
 				"AT+SAPBR=1,1", 
 				"OK", 
 				0, 100, 
@@ -409,7 +426,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			m_isBusy = false;
 		}
 	);
-	Enqueue(cmd);
+	ForceEnqueue(cmd);
 }
 
 void SerialModem::Begin(Stream *serialStream)
