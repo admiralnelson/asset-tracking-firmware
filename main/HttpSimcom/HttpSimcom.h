@@ -100,9 +100,11 @@ public:
     struct HttpRequest
     {
         std::string url;
-        std::string data;
+        const char* data = nullptr;
+        size_t length    = 0;
         ActionHttp action;
         std::map<std::string, std::string> header;
+        bool bGetResult = true;
     };
 
     struct HttpResponse
@@ -115,6 +117,7 @@ public:
         {
             return code > 599;
         }
+        bool bGetResult;
     };
 
 private:
@@ -128,6 +131,7 @@ private:
         std::function<void(HttpResponse &)> callSuccess;
         std::function<void(HttpResponse &)> callFail;
         char* p_dataOutput;
+        bool  bGetResult;
     };
 
 public:

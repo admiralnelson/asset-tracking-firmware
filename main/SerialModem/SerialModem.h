@@ -26,9 +26,21 @@ public:
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
 				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
-				std::function<void()> _failCallback = nullptr, bool _doItUntilSuccess = false)
+				std::function<void()> _failCallback = nullptr, 
+				bool _doItUntilSuccess = false, 
+				size_t commandLength = 0)
 		{
-			strcpy(command, _command);
+			if(commandLength > 0)
+			{
+				command = new char[commandLength + 1];
+			}
+			else
+			{
+				commandLength = strlen(_command) + 1;
+				command = new char[commandLength + 1];
+			}
+			//strcpy(command, _command);
+			memcpy(command, _command, sizeof(char) * commandLength);
 			strcpy(expects, _expects);
 			successCallback = _successCallback;
 			failCallback	= _failCallback;
@@ -42,10 +54,12 @@ public:
 				unsigned int _timeout = 0,
 				unsigned int _delay = 0,
 				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
-				std::function<void()> _failCallback = nullptr,bool _doItUntilSuccess = false)
+				std::function<void()> _failCallback = nullptr,
+				bool _doItUntilSuccess = false,
+				size_t _commandLength = 0)
 		{
 			nextChain = new Command(
-				_command, _expects, _timeout, _delay, _successCallback, _failCallback, _doItUntilSuccess
+				_command, _expects, _timeout, _delay, _successCallback, _failCallback, _doItUntilSuccess, _commandLength
 			);
 			return nextChain;
 		}
@@ -58,6 +72,7 @@ public:
 
 		~Command()
 		{
+			delete []command;
 			if(m_isDeletingNext)
 			{
 				if(nextChain != nullptr)
@@ -72,7 +87,8 @@ public:
 		unsigned int delay;
 		std::function<void(std::smatch&, char*)> successCallback;
 		std::function<void()>			  failCallback;
-		char		 command[100];
+		//char		 command[100];
+		char		*command;
 		char		 expects[100];
 		Command		*nextChain = nullptr;	
 		bool		m_isDeletingNext = false; 
