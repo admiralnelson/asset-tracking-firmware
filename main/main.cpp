@@ -44,7 +44,7 @@ void setup()
 	// 	Serial.print(p_rawData[i]);
 	// }
 	p_Modem->Begin(&hardwareSerial);
-	p_Modem->SetPrefferedNetwork(SerialModem::EGSM);
+	p_Modem->SetPrefferedNetwork(SerialModem::ENBIOT);
 	p_http = new HttpSimcom(*p_Modem); 
 
 	
