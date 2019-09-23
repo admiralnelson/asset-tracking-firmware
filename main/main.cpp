@@ -65,7 +65,8 @@ void loop()
 {
 	//p_Modem->Loop();
 	delay(1000);
-	if(true )
+	if(prevSignal != p_Modem->GetSignal() ||
+	   gprsIsConnected !=  p_Modem->GetIsGPRSConnected())
 	{
 		int freeRAM = ESP.getFreeHeap();
 

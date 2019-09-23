@@ -1,5 +1,7 @@
 #include "SerialModem.h"
 
+
+
 SerialModem::SerialModem()
 {
 	m_serialBuffer = new char[MAX_BUFFER];
@@ -37,10 +39,10 @@ void SerialModem::Loop()
 
 			if (!bcommonCmd)
 			{
-				INFO("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
+				INFO_D("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
 			}
 
-			//INFO("QUEUED and sorted! expects %s for command %s", cmd->expects, cmd->command);
+			//INFO_D("QUEUED and sorted! expects %s for command %s", cmd->expects, cmd->command);
 			m_cmdWaitingList.push_back(new CommandWait(
 				(const char *)cmd->expects,
 				(const char *)cmd->command,
@@ -66,7 +68,7 @@ void SerialModem::Loop()
 			vTaskDelay(cmd->delay / portTICK_PERIOD_MS);
 			if (cmd->delay > 100)
 			{
-				INFO("Write procedure was halted by %d", cmd->delay);
+				INFO_D("Write procedure was halted by %d", cmd->delay);
 			}
 			if(!cmd->m_isDoitUntilSuccess)
 			{
@@ -169,7 +171,7 @@ void SerialModem::Loop()
 					bcommonCmd = bcommonCmd || strcmp("AT+CSQ", (const char*)(*cmdw)->command) == 0;
 					if (!bcommonCmd && serialResult.size() > 0)
 					{
-						INFO("Current serial data %s", serialResult.c_str());
+						INFO_D("Current serial data %s", serialResult.c_str());
 					}*/
 
 					std::smatch matchForPDP;
@@ -188,7 +190,7 @@ void SerialModem::Loop()
 							// bcommonCmd = bcommonCmd || strcmp("AT+CSQ", (const char*)(*cmdw)->command) == 0;
 							// if (!bcommonCmd && strlen(serialResult) > 0)
 							// {
-							// 	INFO("Current serial data (truncated) %s", serialResult.c_str());
+							// 	INFO_D("Current serial data (truncated) %s", serialResult.c_str());
 							// }
 							(*cmdw)->successCallback(p_matches, m_serialBuffer);
 							if(cmd->m_isDoitUntilSuccess)
@@ -209,7 +211,7 @@ void SerialModem::Loop()
 							m_isBusy = false;
 						}
 						delete cmd;
-						//INFO("SUCCESS! isAlreadyCalled %d", (*cmdw)->isAlreadyCalled);
+						//INFO_D("SUCCESS! isAlreadyCalled %d", (*cmdw)->isAlreadyCalled);
 					}
 					alreadyCalled = (*cmdw)->isAlreadyCalled;
 
@@ -226,7 +228,7 @@ void SerialModem::Loop()
 					ERROR("None match for command (truncated) %s -> %s", (*cmdw)->command, serialResult.c_str());
 					if(cmd->m_isDoitUntilSuccess)
 					{
-						INFO("Redoing for command, %s", cmd->command);
+						INFO_D("Redoing for command, %s", cmd->command);
 					}
 					else
 					{
@@ -268,7 +270,7 @@ void SerialModem::StartTaskImplLoop(void * thisObject)
 {
 	INFO("STARTING WRITE LOOP TASK, %x", (unsigned int)thisObject);
 	static_cast<SerialModem*>(thisObject)->Loop();
-	INFO("DONE");
+	INFO_D("DONE");
 
 }
 
@@ -288,6 +290,121 @@ void SerialModem::Enqueue(Command *cmd)
 void SerialModem::ForceEnqueue(Command *cmd)
 {
 	m_cmdsQueue.push_back(cmd);
+}
+
+void SerialModem::SendUdp(UdpRequest &udpReq)
+{
+	std::stringstream cipstartUdp, dataToSend;
+	cipstartUdp << "AT+CIPSTART=" << "\"UDP\"," << "\"" << udpReq.dataToSend.ip << "\"," << udpReq.dataToSend.port;   
+	dataToSend << udpReq.dataToSend.data << char(26);
+	m_udpQueue.push_back(udpReq);
+	Command *c = new Command(
+		cipstartUdp.str().c_str(),
+		"OK",
+		1000,500
+	);
+	c->Chain(
+		"AT+CIPSEND", "OK", 
+		1000, 100
+	)->Chain(
+		dataToSend.str().c_str(), 
+		"SEND OK",
+		5000, 200
+	)->Chain(
+		"",
+		"^\r\nRECV FROM:([0-9]*).([0-9]*).([0-9]*).([0-9]*):([0-9]*)",
+		udpReq.timeout, 500,
+		[=](std::smatch &s, char *p_data)
+		{
+			size_t fsOctect = atoi(s[1].str().c_str()),
+				   ndOctect = atoi(s[2].str().c_str()),
+				   rdOctect = atoi(s[3].str().c_str()),
+				   thOctect = atoi(s[4].str().c_str()),
+				   port = atoi(s[4].str().c_str());
+			IPAddress addr(fsOctect, ndOctect, rdOctect, thOctect);
+			size_t offset = 14 + GetNumberOfDigits(fsOctect)
+							   + GetNumberOfDigits(ndOctect)
+							   + GetNumberOfDigits(rdOctect)
+							   + GetNumberOfDigits(thOctect)
+							   + GetNumberOfDigits(port)
+							   + 2 ;
+			UdpRequest &udp = m_udpQueue.front();
+			UdpPacket udpPack;
+			strcpy(udpPack.ip, addr.toString().c_str()); 
+			memcpy(udpPack.data, p_data + offset, sizeof(char) * MAX_BUFFER - offset - 1);
+			if(udp.callbackOnReceive != nullptr)
+			{
+				udp.callbackOnReceive(udpPack);
+			}
+			m_udpQueue.pop_front();
+		},
+		[=]()
+		{
+			UdpRequest &udp = m_udpQueue.front();
+			if(udp.callbackOnTimeout != nullptr)
+			{
+				udp.callbackOnTimeout();
+			}
+			m_udpQueue.pop_front();
+		}
+	);
+	Enqueue(c);
+}
+
+void SerialModem::SetEdrx(uint8_t edrxVal)
+{
+	std::stringstream edrxCommand;
+	edrxCommand << "AT+CEDRXS=";
+
+	if(edrxVal > 16)
+	{
+		ERROR("Invalid EDRX value (max 16)");
+		return;
+	}
+
+	char edrx[4];
+	memset(edrx, '0', sizeof(char) * 4);
+	itoa(edrxVal, edrx, 2);
+	if(m_netPreffered == ENBIOT)
+	{	
+		edrxCommand << 1 << "," << 5 << "," << "\"" << edrx << "\"";		
+		Command *c = new Command
+		(
+			edrxCommand.str().c_str(),
+			"OK",2000, 100, 
+			[](std::smatch &s, char *)
+			{
+				INFO("EDRX value has been set");
+			} ,
+			[]()
+			{
+				ERROR("Fail to set EDRX value!");
+			}
+		);
+		Enqueue(c);
+	}
+	else if(m_netPreffered == ECATM)
+	{
+		edrxCommand << 1 << "," << 4 << "," << "\"" << edrx << "\"";		
+		Command *c = new Command
+		(
+			edrxCommand.str().c_str(),
+			"OK",2000, 100, 
+			[](std::smatch &s, char *)
+			{
+				INFO("EDRX value has been set");
+			} ,
+			[]()
+			{
+				ERROR("Fail to set EDRX value!");
+			}
+		);
+		Enqueue(c);
+	}
+	else
+	{
+		ERROR("GSM not supported!");
+	}
 }
 
 int SerialModem::GetSignal()
@@ -333,7 +450,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			1000, 1000,
 			[this](std::smatch  &m, char* p_data)
 			{
-				INFO("GPRS should be disconnected now");
+				INFO_D("GPRS should be disconnected now");
 			},
 			[this](){ m_isBusy = false; }
 		);
@@ -343,7 +460,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		5000, 3000,
 		[this](std::smatch  &m, char* p_data)
 		{
-			INFO("deegistered to net");
+			INFO_D("deegistered to net");
 		},
 		[this](){ m_isBusy = false; }
 	)->Chain(
@@ -361,7 +478,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		1000, 100,
 		[this](std::smatch  &m, char* p_data)
 		{
-			INFO("Bearer set to GPRS");
+			INFO_D("Bearer set to GPRS");
 		},
 		[this](){ m_isBusy = false; }
 	)->Chain(
@@ -406,7 +523,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		10000, 3000,
 		[](std::smatch  &m, char* p_data) 
 		{
-			INFO("OK, WAITING TO QUERY IP NOW");
+			INFO("Querying IP...");
 		},
 		[this](){ m_isBusy = false; }
 	)->Chain(
@@ -512,7 +629,7 @@ void SerialModem::SetPrefferedNetwork(ENetworkType net)
 		}
 	)->Chain
 	(
-		"","",1000,10000
+		"","",1000,20000
 	);
 
 	if(net == ECATM)

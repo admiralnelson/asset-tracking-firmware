@@ -263,9 +263,9 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		{ 
 			HttpResponse res;
 			HttpQueue q = m_queue.front();
-			INFO("POINTER %p", q.p_dataOutput);
-			INFO("DATA FIRST CHAR %c", q.p_dataOutput[0]);
-			INFO("DATA LAST CHAR %c", q.p_dataOutput[q.length - 1]);
+			INFO_D("POINTER %p", q.p_dataOutput);
+			INFO_D("DATA FIRST CHAR %c", q.p_dataOutput[0]);
+			INFO_D("DATA LAST CHAR %c", q.p_dataOutput[q.length - 1]);
 			res.bGetResult = q.bGetResult;
 			res.code = q.status;
 			res.data = static_cast<const char*>(q.p_dataOutput);

@@ -110,6 +110,22 @@ public:
 		bool 		m_bAppendNewLine 	= false;
 	};
 
+	struct UdpPacket
+	{
+		IPAddress _ipAddr;
+		char 	data[MAX_BUFFER - 1];
+		char 	ip[100];
+		unsigned int port;
+	};
+
+	struct UdpRequest
+	{
+		UdpPacket dataToSend;
+		unsigned int timeout;
+		std::function<void(UdpPacket &udp)> callbackOnReceive = nullptr;
+		std::function<void()> callbackOnTimeout = nullptr;
+	};
+
 	enum ENetworkStatus
 	{
 		ENOT_YET_READY,
@@ -125,6 +141,7 @@ public:
 		ECATM,
 		ENBIOT
 	};
+
 
 protected:
 	struct CommandWait
@@ -182,6 +199,7 @@ protected:
 	std::string			m_providerName;
 	std::deque<Command*> m_cmdsQueue;
 	std::deque<Command*> m_onHoldQueue;
+	std::deque<UdpRequest> m_udpQueue;
 	std::vector<CommandWait*> m_cmdWaitingList;
 	Stream				 *m_serialStream;
 	TaskHandle_t		 m_task;
@@ -199,6 +217,8 @@ public:
 	void	Begin(Stream *serialStream);
 	void	Enqueue(Command* cmd);
 	void	ForceEnqueue(Command* cmd);
+	void 	SendUdp(UdpRequest &udpReq);
+	void 	SetEdrx(uint8_t edrxVal);
 	int		GetSignal();
 	const char	 *GetProviderName();
 	void		 ConnectGPRS(const char * apn,const char *username, const char *pass, unsigned int retry);
@@ -252,5 +272,10 @@ protected:
 		return  m_serialBuffer;
 	}
 
+private:
+	unsigned GetNumberOfDigits (unsigned i)
+	{
+		return i > 0 ? (int) log10 ((double) i) + 1 : 1;
+	}
 
 };
