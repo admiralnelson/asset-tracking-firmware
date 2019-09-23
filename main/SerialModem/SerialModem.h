@@ -112,18 +112,71 @@ public:
 
 	struct UdpPacket
 	{
+		UdpPacket(const char * _data, const char *domainTarget, unsigned int _port, size_t dataLen = 0)
+		{
+			if(dataLen == 0)
+			{
+				dataLen = strlen(_data) + 1;
+				data = new char[dataLen];
+			}
+			else
+			{
+				data = new char[dataLen];
+			}
+			domain = new char[strlen(domainTarget) + 1];
+			memcpy( data, _data, sizeof(char) * dataLen);
+			strcpy( domain, domainTarget);
+			port = _port;
+			length = dataLen;
+			HEAP_CHECK();
+		}
 		IPAddress _ipAddr;
-		char 	data[MAX_BUFFER - 1];
-		char 	ip[100];
-		unsigned int port;
+		char 	*data = nullptr;
+		char 	*domain = nullptr;
+		unsigned int port = 1000;
+		unsigned int length = 0;
+		~UdpPacket()
+		{
+			INFO_D("data array value %p", data);
+			INFO_D("domain array value %p", domain);
+			delete []data;
+			delete []domain;
+		}
 	};
 
 	struct UdpRequest
 	{
-		UdpPacket dataToSend;
-		unsigned int timeout;
-		std::function<void(UdpPacket &udp)> callbackOnReceive = nullptr;
-		std::function<void()> callbackOnTimeout = nullptr;
+		UdpRequest(const char *data, const char *target, unsigned int port,
+					unsigned int _timeout = 10000, 
+					std::function<void(UdpPacket &udp)> _callbackOnReceive = nullptr,
+					std::function<void()> _callbackOnTimeout = nullptr, size_t len = 0)
+		{
+			dataToSend = new UdpPacket(data, target, port, len);
+			callbackOnReceive = _callbackOnReceive;
+			callbackOnTimeout = _callbackOnTimeout;
+			timeout = _timeout;
+			HEAP_CHECK();
+		}
+		UdpRequest(const UdpRequest& udpReq) : timeout(udpReq.timeout) 
+		{
+			dataToSend = new UdpPacket(udpReq.dataToSend->data, 
+										udpReq.dataToSend->domain, 
+										udpReq.dataToSend->port, 
+										udpReq.dataToSend->length);
+										
+			callbackOnReceive = udpReq.callbackOnReceive;
+			callbackOnTimeout = udpReq.callbackOnTimeout;
+		}
+
+		UdpPacket *dataToSend = nullptr;
+		unsigned int timeout = 1000;
+		std::function<void(UdpPacket &udp)> callbackOnReceive;
+		std::function<void()> callbackOnTimeout;
+		~UdpRequest()
+		{
+			INFO_D("data to send pointer %p", dataToSend);
+			delete dataToSend;
+		}
 	};
 
 	enum ENetworkStatus
@@ -217,7 +270,7 @@ public:
 	void	Begin(Stream *serialStream);
 	void	Enqueue(Command* cmd);
 	void	ForceEnqueue(Command* cmd);
-	void 	SendUdp(UdpRequest &udpReq);
+	void 	SendUdp(UdpRequest udpReq);
 	void 	SetEdrx(uint8_t edrxVal);
 	int		GetSignal();
 	const char	 *GetProviderName();

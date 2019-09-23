@@ -23,6 +23,7 @@ HardwareSerial hardwareSerial(2);
 
 void InitHTTP();
 void PostDataTest();
+void UdpTest();
 
 void setup() 
 {
@@ -94,10 +95,27 @@ void loop()
 	 	if (millis() - lastDownload > waitTimeToDownloadAgain)
 	 	{
 			lastDownload = millis();
-	 		PostDataTest();
+			UdpTest();
+	 		//PostDataTest();
 			 //InitHTTP();
 	 	}
 	}
+}
+
+void UdpTest()
+{
+	INFO("UDP test");
+
+	SerialModem::UdpRequest req ("test data", "35.240.207.36", 1257, 10000,
+		[](SerialModem::UdpPacket &udp)
+		{
+			INFO("Received udp reply packet from %s:%d", udp.domain, udp.port);
+			INFO("Data %s", udp.data);
+		}
+	);
+	p_Modem->SendUdp(req);
+	INFO("UDP request queued");
+
 }
 
 void PostDataTest()

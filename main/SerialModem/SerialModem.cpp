@@ -51,7 +51,7 @@ void SerialModem::Loop()
 				cmd->failCallback,
 				cmd->commandLength)
 			);
-			HEAP_CHECK(); //BANG, ERROR JIKA TOTAL STRING COMMAND > 100
+			HEAP_CHECK(); //BANG, ERROR JIKA TOTAL STRING COMMAND > 100. note was FIXED
 			vTaskDelay(cmd->waitBeforeWrite / portTICK_PERIOD_MS);
 			if(cmd->commandLength > 0)
 			{
@@ -79,6 +79,7 @@ void SerialModem::Loop()
 		{
 			if(millis() - lastTime > REFRESH_RATE_MS)
 			{
+				Enqueue(new Command("ATE0", "OK", 100,100));
 				Enqueue(new SerialModem::Command(
 					"AT+COPS?",
 					"([0-9]*),([0-9]*),\"(.*)?\",([0-9]*)", 0, 100,
@@ -104,7 +105,6 @@ void SerialModem::Loop()
 								m_netPreffered = EUNKNOWN;
 								break;
 							}
-							Enqueue(new Command("ATE0", "OK", 100,100));
 						}
 					},
 					[this]()
@@ -292,23 +292,30 @@ void SerialModem::ForceEnqueue(Command *cmd)
 	m_cmdsQueue.push_back(cmd);
 }
 
-void SerialModem::SendUdp(UdpRequest &udpReq)
+void SerialModem::SendUdp(UdpRequest udpReq)
 {
-	std::stringstream cipstartUdp, dataToSend;
-	cipstartUdp << "AT+CIPSTART=" << "\"UDP\"," << "\"" << udpReq.dataToSend.ip << "\"," << udpReq.dataToSend.port;   
-	dataToSend << udpReq.dataToSend.data << char(26);
+	std::stringstream cipstartUdp;
+	cipstartUdp << "AT+CIPSTART=" << "\"UDP\"," << "\"" << udpReq.dataToSend->domain << "\"," << udpReq.dataToSend->port;   
 	m_udpQueue.push_back(udpReq);
 	Command *c = new Command(
+		"AT+CIPSRIP=1", 
+		"OK", 
+		10000, 10
+	);
+	c->Chain(
 		cipstartUdp.str().c_str(),
 		"OK",
 		1000,500
-	);
-	c->Chain(
-		"AT+CIPSEND", "OK", 
+	)->Chain(
+		"AT+CIPSEND", ">", 
 		1000, 100
 	)->Chain(
-		dataToSend.str().c_str(), 
-		"SEND OK",
+		udpReq.dataToSend->data, 
+		"",
+		0, 0, nullptr, nullptr, false, false
+	)->Chain(
+		"\032",
+		"SEND OK", 
 		5000, 200
 	)->Chain(
 		"",
@@ -329,14 +336,18 @@ void SerialModem::SendUdp(UdpRequest &udpReq)
 							   + GetNumberOfDigits(port)
 							   + 2 ;
 			UdpRequest &udp = m_udpQueue.front();
-			UdpPacket udpPack;
-			strcpy(udpPack.ip, addr.toString().c_str()); 
-			memcpy(udpPack.data, p_data + offset, sizeof(char) * MAX_BUFFER - offset - 1);
+			UdpPacket udpPack((const char*)p_data + offset, addr.toString().c_str(), port);
+			HEAP_CHECK();
+			INFO_D("udpacket data %s", udpPack.data);
+			INFO_D("udpacket domain %s", udpPack.domain);
 			if(udp.callbackOnReceive != nullptr)
 			{
 				udp.callbackOnReceive(udpPack);
 			}
+			INFO_D("udp callbac should be executed");
 			m_udpQueue.pop_front();
+			INFO_D("deque");
+
 		},
 		[=]()
 		{
@@ -345,9 +356,15 @@ void SerialModem::SendUdp(UdpRequest &udpReq)
 			{
 				udp.callbackOnTimeout();
 			}
+			INFO_D("udp callbac should be executed");
 			m_udpQueue.pop_front();
 		}
 	);
+	Enqueue(new Command(
+		"AT+CIPCLOSE",
+		"CLOSE OK",
+		10000, 100
+	));
 	Enqueue(c);
 }
 
