@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <Arduino.h>
+#include <esp_heap_caps.h>
+
 using cstr = const char * const;
 
 static constexpr cstr past_last_slash(cstr str, cstr last_slash)
@@ -18,8 +20,10 @@ static constexpr cstr past_last_slash(cstr str)
 
 #define __SHORT_FILE__ ({constexpr cstr sf__ {past_last_slash(__FILE__)}; sf__;})
 #define INFO(...) { Serial.printf("[INFO ]  %s (%d) =>", __FUNCTION__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}
-#define ERROR(...) { Serial.printf("[ERROR]  %s (%d) =>", __FUNCTION__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}
+#define ERROR(...) { Serial.printf("[ERROR]  %s (%d) =>", __FUNCTION__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}	
+#define FATAL(...) { Serial.printf("[FATAL]  %s (%d) =>", __FUNCTION__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}	
 
+#define HEAP_CHECK() if(!heap_caps_check_integrity_all(true)) { FATAL("HEAP ERROR AT %s %d", __SHORT_FILE__, __LINE__); }
 //#define INFO(...) { Serial.printf("Info :"); Serial.printf(__VA_ARGS__); }
 //#define ERROR(...) { Serial.printf("ERROR :"); Serial.printf(__VA_ARGS__); }
 

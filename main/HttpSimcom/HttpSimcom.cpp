@@ -9,7 +9,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 	std::stringstream httpParaUrl, httpParaTimeout, httpData, httpactionCmd;
 	httpParaUrl 	<< "AT+HTTPPARA=\"URL\"," << "\"" << req.url << "\""; 
 	httpParaTimeout << "AT+HTTPPARA=\"TIMEOUT\"," << timeout;
-	httpData 	  	<< "AT+HTTPDATA=" << req.length << "60000";
+	httpData 	  	<< "AT+HTTPDATA=" << req.length << "," << "5000";
 	httpactionCmd   << "AT+HTTPACTION=" << int(req.action);
 
 	SerialModem::Command *p = new SerialModem::Command(
@@ -84,32 +84,6 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000, 0
 	);
 
-
-	if(req.length > 0)
-	{
-		p2 = p2->Chain(
-			httpData.str().c_str(), "DOWNLOAD",
-			1000,0
-		)->Chain(
-			(const char*) req.data, "OK", 
-			1000, 1000,
-			nullptr,
-			[=]()
-			{
-				INFO("failed to fill httpData param. Please check data len and actual data length");
-				HttpResponse res;
-				res.code = HttpStatusCode::Init_Failed;
-				if(m_queue.size() > 0)
-				{
-					HttpQueue &q = m_queue.front();			
-					q.callFail(res);
-					m_queue.pop();
-				}
-			},
-			false,
-			req.length
-		);
-	}
 	
 	for (const auto& kv : req.header) 
 	{
@@ -130,20 +104,67 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					q.callFail(res);
 					m_queue.pop();
 				}
+				m_serialModem->Enqueue(new SerialModem::Command(
+					"AT+HTTPTERM", 
+					"OK", 
+					200, 200, 
+					[](std::smatch  &s, char* p_data) 
+					{ 
+						INFO("HTTP terminated.");
+					}
+				));
 			}
 		);
 		httpParaUserHeader.clear();
     }
 
+	if(req.length > 0 && req.data != nullptr)
+	{
+		p2 = p2->Chain(
+			httpData.str().c_str(), "DOWNLOAD",
+			3000,0
+		)->Chain(
+			req.data, "OK", 
+			6000, 0,
+			[](std::smatch &s, char *p_dat)
+			{
+				INFO("Data download ok");
+			},
+			[=]()
+			{
+				INFO("failed to fill httpData param. Please check data len and actual data length");
+				HttpResponse res;
+				res.code = HttpStatusCode::Init_Failed;
+				if(m_queue.size() > 0)
+				{
+					HttpQueue &q = m_queue.front();			
+					q.callFail(res);
+					m_queue.pop();
+				}
+				m_serialModem->Enqueue(new SerialModem::Command(
+					"AT+HTTPTERM", 
+					"OK", 
+					200, 200, 
+					[](std::smatch  &s, char* p_data) 
+					{ 
+						INFO("HTTP terminated.");
+					}
+				));
+			},
+			false, true,
+			req.length, 1000
+		);
+	}
+
 	p2->Chain(
 		httpactionCmd.str().c_str(), 
 		"OK\r\n",
-		1000, 0,
+		1000, 100,
 		[=](std::smatch  &s, char* p_data) 
 		{
 			INFO("Executed"); 
 			HttpQueue &q = m_queue.front();
-			q.timeStart = millis();
+			q.timeStart = millis() - 100;
 		}
 	)->Chain(
 		"", 

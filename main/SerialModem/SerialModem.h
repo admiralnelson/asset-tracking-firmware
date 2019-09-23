@@ -16,6 +16,8 @@
 #define MAX_RETRY 20
 #define REFRESH_RATE_MS 3000
 
+
+
 class SerialModem
 {
 public:
@@ -28,25 +30,32 @@ public:
 				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
 				std::function<void()> _failCallback = nullptr, 
 				bool _doItUntilSuccess = false, 
-				size_t commandLength = 0)
+				bool _insertNewLine = true, 
+				size_t _commandLength = 0,
+				unsigned int _waitBeforeWrite = 0)
 		{
-			if(commandLength > 0)
+			if(_commandLength > 0)
 			{
-				command = new char[commandLength + 1];
+				commandLength = _commandLength + 1;
 			}
 			else
 			{
-				commandLength = strlen(_command) + 1;
-				command = new char[commandLength + 1];
+				commandLength = strlen(_command) + 1 ;
 			}
+			HEAP_CHECK();
 			//strcpy(command, _command);
+			command = new char[commandLength];
+			memset(command, 0, sizeof(char) * commandLength);
 			memcpy(command, _command, sizeof(char) * commandLength);
 			strcpy(expects, _expects);
+			HEAP_CHECK();
 			successCallback = _successCallback;
 			failCallback	= _failCallback;
 			timeout = _timeout;
 			delay = _delay;
 			m_isDoitUntilSuccess = _doItUntilSuccess;
+			m_bAppendNewLine = _insertNewLine;
+			waitBeforeWrite = _waitBeforeWrite;
 		}
 
 		Command	*Chain(const char * _command, 
@@ -56,11 +65,14 @@ public:
 				std::function<void(std::smatch&, char*)> _successCallback = nullptr,
 				std::function<void()> _failCallback = nullptr,
 				bool _doItUntilSuccess = false,
-				size_t _commandLength = 0)
+				bool _insertNewLine = true,
+				size_t _commandLength = 0,
+				unsigned int _waitBeforeWrite = 0)
 		{
 			nextChain = new Command(
-				_command, _expects, _timeout, _delay, _successCallback, _failCallback, _doItUntilSuccess, _commandLength
+				_command, _expects, _timeout, _delay, _successCallback, _failCallback, _doItUntilSuccess, _insertNewLine, _commandLength, _waitBeforeWrite
 			);
+			HEAP_CHECK();
 			return nextChain;
 		}
 
@@ -85,14 +97,17 @@ public:
 
 		unsigned int timeout;
 		unsigned int delay;
+		unsigned int waitBeforeWrite;
 		std::function<void(std::smatch&, char*)> successCallback;
 		std::function<void()>			  failCallback;
 		//char		 command[100];
+		size_t 		commandLength = 0;
 		char		*command;
 		char		 expects[100];
 		Command		*nextChain = nullptr;	
 		bool		m_isDeletingNext = false; 
 		bool		m_isDoitUntilSuccess = false;
+		bool 		m_bAppendNewLine 	= false;
 	};
 
 	enum ENetworkStatus
@@ -114,13 +129,26 @@ public:
 protected:
 	struct CommandWait
 	{
-		CommandWait(const char * _expects, const char * _command, 
+		CommandWait(const char * _expects, 
+			const char * _command, 
 			unsigned int _timeout,
 			std::function<void(std::smatch&, char* p_data)> _successCallback = nullptr, 
-			std::function<void()> _failCallback = nullptr)
+			std::function<void()> _failCallback = nullptr,
+			unsigned int _commandLength = 0)
 		{
+			//strcpy(command, _command);
+			if(_commandLength > 0)
+			{
+				commandLength = _commandLength;
+			}
+			else
+			{
+				commandLength = strlen(_command) + 1;
+			}
+			command = new char[commandLength];
+			memset(command, 0, sizeof(char) * commandLength);
+			memcpy(command, _command, sizeof(char) * commandLength);
 			strcpy(expects, _expects);
-			strcpy(command, _command);
 
 			lastTime		= millis();
 			timeout			= _timeout;
@@ -131,15 +159,19 @@ protected:
 		{
 			return (millis() - lastTime) > timeout;
 		}
-
+		~CommandWait()
+		{
+			delete []command;
+		}
 
 		unsigned long lastTime;
 		unsigned int  timeout;
 		std::function<void(std::smatch&, char* p_data)> successCallback;
 		std::function<void()>			  failCallback;
 		char		  expects[100];
-		char		  command[100];
+		char		  *command;
 		bool		  isAlreadyCalled = false;
+		unsigned int  commandLength;
 	};
 	
 	int					m_signal = 0;

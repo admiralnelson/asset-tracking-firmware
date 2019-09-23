@@ -37,7 +37,7 @@ void SerialModem::Loop()
 
 			if (!bcommonCmd)
 			{
-				INFO("Executing this command %s", cmd->command);
+				INFO("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
 			}
 
 			//INFO("QUEUED and sorted! expects %s for command %s", cmd->expects, cmd->command);
@@ -46,11 +46,22 @@ void SerialModem::Loop()
 				(const char *)cmd->command,
 				cmd->timeout,
 				cmd->successCallback,
-				cmd->failCallback)
+				cmd->failCallback,
+				cmd->commandLength)
 			);
-			if(strlen(cmd->command) > 0)
+			HEAP_CHECK(); //BANG, ERROR JIKA TOTAL STRING COMMAND > 100
+			vTaskDelay(cmd->waitBeforeWrite / portTICK_PERIOD_MS);
+			if(cmd->commandLength > 0)
 			{
-				m_serialStream->println(cmd->command);
+				if(cmd->m_bAppendNewLine)
+				{
+					m_serialStream->println(cmd->command);
+				}
+				else
+				{
+					m_serialStream->print(cmd->command);					
+				}
+				
 			}
 			vTaskDelay(cmd->delay / portTICK_PERIOD_MS);
 			if (cmd->delay > 100)
@@ -144,6 +155,7 @@ void SerialModem::Loop()
 			if (!(*cmdw)->isAlreadyCalled)
 			{
 				std::smatch &p_matches = *new std::smatch;
+				HEAP_CHECK();
 				std::string serialResult;
 				serialResult.reserve(MAX_BUFFER);
 				std::regex expects((*cmdw)->expects);
@@ -167,7 +179,7 @@ void SerialModem::Loop()
 						m_isGprsReady  = false;
 					}
 
-					if (std::regex_search(serialResult, p_matches, expects))
+					if (std::regex_search(serialResult, p_matches, expects) || strlen((*cmdw)->expects) == 0 )
 					{
 						(*cmdw)->isAlreadyCalled = true;
 						if ((*cmdw)->successCallback != nullptr)
@@ -203,7 +215,7 @@ void SerialModem::Loop()
 
 				} while (millis() - timeNow < (*cmdw)->timeout && !alreadyCalled);
 				delete &p_matches;	
-
+				HEAP_CHECK();
 				if (!success)
 				{
 					(*cmdw)->isAlreadyCalled = true;
@@ -247,7 +259,7 @@ void SerialModem::Loop()
 				m_onHoldQueue.pop_front();
 			}
 		}
-
+		HEAP_CHECK();
 	}
 
 }
@@ -291,7 +303,6 @@ const char * SerialModem::GetProviderName()
 
 void SerialModem::ConnectGPRS(const char * apn, const char * username, const char * pass, unsigned int retry)
 {
-	m_isBusy = true;
 	std::stringstream gprsCmd;
 	std::stringstream atSapbrApn, atSapbrUser, atSapbrPass;
 	atSapbrApn << "AT+SAPBR=3,1,\""<< "APN" << "\",\"" << apn << "\"";
@@ -404,7 +415,6 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		10000, 10000,
 		[this](std::smatch  &m, char* p_data)
 		{
-			m_isGprsReady = true;
 			m_ipaddr = IPAddress(
 				atoi(m[1].str().c_str()),
 				atoi(m[2].str().c_str()),
@@ -412,13 +422,20 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 				atoi(m[4].str().c_str())
 			);
 			INFO("IP address: %s", m_ipaddr.toString().c_str());
+		},
+		[this]()
+		{
+			ERROR("FAIL to connect GPRS");
 			m_isBusy = false;
-			ForceEnqueue(new SerialModem::Command(
-				"AT+SAPBR=1,1", 
-				"OK", 
-				0, 100, 
-				[](std::smatch  &s, char* p_data) { INFO("Bearer open!."); }
-			));
+		}
+	)->Chain(
+		"AT+SAPBR=1,1", 
+		"OK", 
+		1000, 100, 
+		[this](std::smatch  &s, char* p_data) 
+		{ 
+			INFO("Bearer open!."); 
+			m_isGprsReady = true;
 		},
 		[this]()
 		{
@@ -426,6 +443,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			m_isBusy = false;
 		}
 	);
+	m_isBusy = true;
 	ForceEnqueue(cmd);
 }
 
@@ -492,6 +510,9 @@ void SerialModem::SetPrefferedNetwork(ENetworkType net)
 		{
 			INFO("Success switched net!");	
 		}
+	)->Chain
+	(
+		"","",1000,10000
 	);
 
 	if(net == ECATM)
