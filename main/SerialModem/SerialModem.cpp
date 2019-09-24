@@ -225,7 +225,7 @@ void SerialModem::Loop()
 					{
 						(*cmdw)->failCallback();
 					}
-					ERROR("None match for command (truncated) %s -> %s", (*cmdw)->command, serialResult.c_str());
+					ERROR_D("None match for command (truncated) %s -> %s", (*cmdw)->command, serialResult.c_str());
 					if(cmd->m_isDoitUntilSuccess)
 					{
 						INFO_D("Redoing for command, %s", cmd->command);
@@ -305,10 +305,10 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 	c->Chain(
 		cipstartUdp.str().c_str(),
 		"OK",
-		1000,500
+		1000,0
 	)->Chain(
 		"AT+CIPSEND", ">", 
-		1000, 100
+		1000, 0
 	)->Chain(
 		udpReq.dataToSend->data, 
 		"",
@@ -316,11 +316,11 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 	)->Chain(
 		"\032",
 		"SEND OK", 
-		5000, 200
+		5000, 0
 	)->Chain(
 		"",
 		"^\r\nRECV FROM:([0-9]*).([0-9]*).([0-9]*).([0-9]*):([0-9]*)",
-		udpReq.timeout, 500,
+		udpReq.timeout, 0,
 		[=](std::smatch &s, char *p_data)
 		{
 			size_t fsOctect = atoi(s[1].str().c_str()),
@@ -422,6 +422,42 @@ void SerialModem::SetEdrx(uint8_t edrxVal)
 	{
 		ERROR("GSM not supported!");
 	}
+}
+
+void SerialModem::MeasureTCPHandshakeTime(unsigned int howManyTime, const char *domain,  unsigned int port)
+{
+	std::stringstream cipstartTcp;
+	cipstartTcp << "AT+CIPSTART=" << "\"TCP\"," << "\"" << domain << "\"," << port;   
+	
+	Enqueue(new Command(
+		"AT+CIPCLOSE",
+		"CLOSE OK",
+		10000, 100
+	));
+	for (size_t i = 0; i < howManyTime; i++)
+	{
+		Command *c = new Command(
+			"AT+CIPSRIP=1", 
+			"OK", 
+			10000, 10
+		);
+		c->Chain(
+			cipstartTcp.str().c_str(),
+			"OK",
+			1000,500, nullptr,
+			[]()
+			{
+				ERROR_D("unable to connect");
+			}
+		)->Chain(
+			"AT+CIPCLOSE",
+			"CLOSE OK",
+			10000, 100
+		);
+		Enqueue(c);
+	}
+	
+	
 }
 
 int SerialModem::GetSignal()

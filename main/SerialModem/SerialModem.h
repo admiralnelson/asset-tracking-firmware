@@ -271,6 +271,7 @@ public:
 	void	Enqueue(Command* cmd);
 	void	ForceEnqueue(Command* cmd);
 	void 	SendUdp(UdpRequest udpReq);
+	void 	MeasureTCPHandshakeTime(unsigned int howManyTime = 10, const char *domain = "google.com", unsigned int port = 80);
 	void 	SetEdrx(uint8_t edrxVal);
 	int		GetSignal();
 	const char	 *GetProviderName();
