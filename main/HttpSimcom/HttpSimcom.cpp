@@ -28,7 +28,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		},
 		[=]() 
 		{
-			 m_serialModem->Enqueue(new SerialModem::Command(
+			 m_serialModem->ForceEnqueue(new SerialModem::Command(
 				"AT+HTTPTERM", 
 				"OK", 
 				300, 0, 
@@ -104,7 +104,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					q.callFail(res);
 					m_queue.pop();
 				}
-				m_serialModem->Enqueue(new SerialModem::Command(
+				m_serialModem->ForceEnqueue(new SerialModem::Command(
 					"AT+HTTPTERM", 
 					"OK", 
 					200, 200, 
@@ -141,7 +141,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					q.callFail(res);
 					m_queue.pop();
 				}
-				m_serialModem->Enqueue(new SerialModem::Command(
+				m_serialModem->ForceEnqueue(new SerialModem::Command(
 					"AT+HTTPTERM", 
 					"OK", 
 					200, 200, 
@@ -180,6 +180,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			q.timeEnd = millis();
 			q.status = (HttpStatusCode) atoi(s[2].str().c_str());
 			q.length = dataLen;
+
 			if(dataLen == 0 || !q.bGetResult) 
 			{
 				q.p_dataOutput = new char[2];//std::shared_ptr<char>(new char[2], std::default_delete<char[]>());
@@ -245,7 +246,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 				q.callFail(res);
 				m_queue.pop();
 			}
-			m_serialModem->Enqueue(new SerialModem::Command(
+			m_serialModem->ForceEnqueue(new SerialModem::Command(
 				"AT+HTTPTERM", 
 				"OK", 
 				200, 200, 
@@ -280,7 +281,37 @@ void HttpSimcom::HttpDo(HttpRequest req,
 	m_serialModem->Enqueue(p);
 }
 
-bool HttpSimcom::InternetTest()
+float HttpSimcom::InternetTest()
 {
-    return true;
+	const int numOfTrial = 10;
+	const int httpTimeout = 30;
+    unsigned long timeout = millis();
+	bool bIscompleted = false;
+	auto successCallback = [this](HttpResponse &res)
+	{
+		if(res.code == HttpStatusCode::OK)
+			m_dtSpeedTest.push_back(float(res.timeTaken / 1000)); //nb pls substract with tcp handshake too.
+	};
+
+	auto failcallback = [this](HttpResponse &res)
+	{
+		INFO_D("fail to download");
+	};
+	for (size_t i = 0; i < numOfTrial; i++)
+	{
+		HttpRequest req;
+		req.bGetResult = false;
+		req.url = "http://35.240.207.36/api/values/15000";
+		HttpDo(req, successCallback, failcallback, httpTimeout);
+	}
+	
+	while(millis() - timeout < numOfTrial * httpTimeout * 1000 && m_dtSpeedTest.size() < numOfTrial )
+	{
+		
+	}
+	float result = std::accumulate(m_dtSpeedTest.begin(), m_dtSpeedTest.end(), 0) / m_dtSpeedTest.size();
+	result = 15000 / (result * 1000);
+
+	INFO("download speed is %f KB/s, after many %d trial", result, m_dtSpeedTest.size());
+	return result;
 }

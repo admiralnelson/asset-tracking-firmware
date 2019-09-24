@@ -41,7 +41,11 @@ void SerialModem::Loop()
 			{
 				INFO_D("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
 			}
-
+			if(cmd->nextChain != nullptr)
+			{
+				//we entered chained mode, 
+				m_isBusy = true;
+			}
 			//INFO_D("QUEUED and sorted! expects %s for command %s", cmd->expects, cmd->command);
 			m_cmdWaitingList.push_back(new CommandWait(
 				(const char *)cmd->expects,
@@ -201,8 +205,6 @@ void SerialModem::Loop()
 						success = true;
 						if(cmd->nextChain != nullptr)
 						{
-							//we entered chained mode, 
-							m_isBusy = true;
 							ForceEnqueue(cmd->nextChain);
 						}
 						else
@@ -289,7 +291,7 @@ void SerialModem::Enqueue(Command *cmd)
 
 void SerialModem::ForceEnqueue(Command *cmd)
 {
-	m_cmdsQueue.push_back(cmd);
+	m_cmdsQueue.push_front(cmd);
 }
 
 void SerialModem::SendUdp(UdpRequest udpReq)
@@ -305,7 +307,16 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 	c->Chain(
 		cipstartUdp.str().c_str(),
 		"OK",
-		1000,0
+		1000,0,
+		nullptr,
+		[=]()
+		{
+			ForceEnqueue(new Command(
+				"AT+CIPCLOSE",
+				"CLOSE OK",
+				10000, 100
+			));
+		}
 	)->Chain(
 		"AT+CIPSEND", ">", 
 		1000, 0
@@ -327,7 +338,7 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 				   ndOctect = atoi(s[2].str().c_str()),
 				   rdOctect = atoi(s[3].str().c_str()),
 				   thOctect = atoi(s[4].str().c_str()),
-				   port = atoi(s[4].str().c_str());
+				   port = atoi(s[5].str().c_str());
 			IPAddress addr(fsOctect, ndOctect, rdOctect, thOctect);
 			size_t offset = 14 + GetNumberOfDigits(fsOctect)
 							   + GetNumberOfDigits(ndOctect)
@@ -358,13 +369,17 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 			}
 			INFO_D("udp callbac should be executed");
 			m_udpQueue.pop_front();
+			ForceEnqueue(new Command(
+				"AT+CIPCLOSE",
+				"CLOSE OK",
+				10000, 100
+			));
 		}
-	);
-	Enqueue(new Command(
+	)->Chain(
 		"AT+CIPCLOSE",
 		"CLOSE OK",
 		10000, 100
-	));
+	);
 	Enqueue(c);
 }
 
@@ -429,35 +444,42 @@ void SerialModem::MeasureTCPHandshakeTime(unsigned int howManyTime, const char *
 	std::stringstream cipstartTcp;
 	cipstartTcp << "AT+CIPSTART=" << "\"TCP\"," << "\"" << domain << "\"," << port;   
 	
-	Enqueue(new Command(
+	Command *c = new Command(
 		"AT+CIPCLOSE",
-		"CLOSE OK",
+		".*",
 		10000, 100
-	));
+	);
+	Command *c2 = c->Chain(
+		"AT+CIPSRIP=1", 
+		"OK", 
+		10000, 10
+	);
 	for (size_t i = 0; i < howManyTime; i++)
 	{
-		Command *c = new Command(
-			"AT+CIPSRIP=1", 
-			"OK", 
-			10000, 10
-		);
-		c->Chain(
+		c2 = c2->Chain(
 			cipstartTcp.str().c_str(),
-			"OK",
-			1000,500, nullptr,
-			[]()
+			"CONNECT OK",
+			20000,500, 
+			[](std::smatch &s, char *p)
+			{
+				INFO_D("Connection success!");
+			},
+			[=]()
 			{
 				ERROR_D("unable to connect");
+				ForceEnqueue(new Command(
+					"AT+CIPCLOSE",
+					"CLOSE OK",
+					10000, 100
+				));
 			}
 		)->Chain(
 			"AT+CIPCLOSE",
 			"CLOSE OK",
 			10000, 100
 		);
-		Enqueue(c);
 	}
-	
-	
+	Enqueue(c);
 }
 
 int SerialModem::GetSignal()

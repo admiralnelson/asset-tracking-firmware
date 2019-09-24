@@ -10,6 +10,7 @@
 #include <HardwareSerial.h>
 #include <functional>
 #include <map>
+#include <vector>
 #define RXD2 16
 #define TXD2 17
 #define MAX_CHAR 4000
@@ -24,6 +25,7 @@ HardwareSerial hardwareSerial(2);
 void InitHTTP();
 void PostDataTest();
 void UdpTest();
+void DownloadNovelProcedure();
 
 void setup() 
 {
@@ -62,6 +64,7 @@ int lastConnect = 0;
 // the loop function runs over and over again until power down or reset
 int prevSignal = 0;
 bool gprsIsConnected = false;
+bool executeOnce = false;
 void loop() 
 {
 	//p_Modem->Loop();
@@ -90,15 +93,23 @@ void loop()
 		callOnce = false;
 	}
 
-	if (p_Modem->GetIsGPRSConnected())
+	if (p_Modem->GetIsGPRSConnected() && !executeOnce)
 	{
 	 	if (millis() - lastDownload > waitTimeToDownloadAgain)
 	 	{
 			lastDownload = millis();
 			UdpTest();
+			// for (size_t i = 0; i < 5; i++)
+			// {
+			// 	DownloadNovelProcedure();
+			// }
+			
 	 		//PostDataTest();
-			 //InitHTTP();
-	 	}
+			//InitHTTP();
+			p_Modem->MeasureTCPHandshakeTime(20);
+			p_http->InternetTest();
+			executeOnce = true;
+		 }
 	}
 }
 
@@ -150,11 +161,12 @@ void DownloadNovelProcedure()
 {
 	INFO("DOWNLOAD PAGE");
 	HttpSimcom::HttpRequest req;
-	req.url = "http://pastebin.com/raw/TUtLdNHZ";
+	req.url = "http://35.240.207.36/api/values/3000";
 	std::map<std::string, std::string> header = {
 		{"Authorization","test"}
 	};
 	req.header = header;
+	req.bGetResult = false;
 	req.action = HttpSimcom::ActionHttp::Get;
 	p_http->HttpDo(req, 
 		[](HttpSimcom::HttpResponse &r)
@@ -163,8 +175,8 @@ void DownloadNovelProcedure()
 			INFO("CODE %d, TIME %lu, Freemem %d B ", r.code, r.timeTaken, ESP.getFreeHeap());
 			int showInHalf = r.length / 2;
 			int otherHalf = r.length - showInHalf;
-			INFO("DATA \n%.*s", showInHalf , r.data);
-			INFO("DATA \n%.*s", otherHalf , r.data + showInHalf);
+			//INFO("DATA \n%.*s", showInHalf , r.data);
+			//INFO("DATA \n%.*s", otherHalf , r.data + showInHalf);
 
 		},
 		[](HttpSimcom::HttpResponse &r)

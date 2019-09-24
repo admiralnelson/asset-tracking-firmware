@@ -8,6 +8,7 @@
 #include <queue>
 #include <memory>
 #include <queue>
+#include <numeric>
 
 #define MAX_READ 200
 
@@ -143,7 +144,7 @@ public:
                 std::function<void(HttpResponse &)> callbackSuccess,
                 std::function<void(HttpResponse &)> callbackFail,
                 unsigned int timeout = 60);
-    bool InternetTest();
+    float InternetTest();
 
     ~HttpSimcom();
 
@@ -173,5 +174,8 @@ private:
     SerialModem           *m_serialModem;
     std::queue<HttpQueue> m_queue;
     unsigned int          m_counter;
+
+	std::vector<float> m_dtSpeedTest;
+
 };
 
