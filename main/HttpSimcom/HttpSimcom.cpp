@@ -1,5 +1,6 @@
 #include "HttpSimcom.h"
 
+
 void HttpSimcom::HttpDo(HttpRequest req, 
                 std::function<void(HttpResponse &)> callbackSuccess,
                 std::function<void(HttpResponse &)> callbackFail,
@@ -17,7 +18,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		300, 0, 
 		[=](std::smatch  &s, char* p_data)
 		{ 
-			INFO("HTTP inited.");
+			INFO_D("HTTP inited.");
 			m_counter++;
 			HttpQueue q;
 			q.id = m_counter;
@@ -34,7 +35,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 				300, 0, 
 				[=](std::smatch  &s, char* p_data) 
 				{ 
-					INFO("HTTP failed. Terminating now"); 
+					INFO_D("HTTP failed. Terminating now"); 
                     HttpResponse res;
 					res.code = HttpStatusCode::Init_Failed;
 					if(m_queue.size() > 0)
@@ -52,7 +53,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000, 0, nullptr,
 		[=]()
 		{
-			INFO("Failed to fill parameter. Check URL");
+			INFO_D("Failed to fill parameter. Check URL");
 			HttpResponse res;
 			res.code = HttpStatusCode::Init_Failed;
 			
@@ -68,7 +69,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000,0, nullptr,
 		[=]()
 		{
-			INFO("Failed to fill parameter. Check timeout value");
+			INFO_D("Failed to fill parameter. Check timeout value");
 			HttpResponse res;
 			res.code = HttpStatusCode::Init_Failed;
 			if(m_queue.size() > 0)
@@ -94,7 +95,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			1000,0, nullptr,
 			[=]()
 			{
-				INFO("Failed to fill parameter. Check timeout value");
+				INFO_D("Failed to fill parameter. Check timeout value");
 				HttpResponse res;
 				res.code = HttpStatusCode::Init_Failed;
 				
@@ -110,7 +111,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					200, 200, 
 					[](std::smatch  &s, char* p_data) 
 					{ 
-						INFO("HTTP terminated.");
+						INFO_D("HTTP terminated.");
 					}
 				));
 			}
@@ -128,11 +129,11 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			6000, 0,
 			[](std::smatch &s, char *p_dat)
 			{
-				INFO("Data download ok");
+				INFO_D("Data download ok");
 			},
 			[=]()
 			{
-				INFO("failed to fill httpData param. Please check data len and actual data length");
+				INFO_D("failed to fill httpData param. Please check data len and actual data length");
 				HttpResponse res;
 				res.code = HttpStatusCode::Init_Failed;
 				if(m_queue.size() > 0)
@@ -147,7 +148,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					200, 200, 
 					[](std::smatch  &s, char* p_data) 
 					{ 
-						INFO("HTTP terminated.");
+						INFO_D("HTTP terminated.");
 					}
 				));
 			},
@@ -162,7 +163,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000, 100,
 		[=](std::smatch  &s, char* p_data) 
 		{
-			INFO("Executed"); 
+			INFO_D("Executed"); 
 			HttpQueue &q = m_queue.front();
 			q.timeStart = millis() - 100;
 		}
@@ -172,7 +173,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		timeout*1000 + 5, 0,
 		[=](std::smatch  &s, char* p_data) 
 		{ 
-			INFO("Http result: %d len: %d", atoi(s[2].str().c_str()), atoi(s[3].str().c_str()) ); 
+			INFO_D("Http result: %d len: %d", atoi(s[2].str().c_str()), atoi(s[3].str().c_str()) ); 
 			size_t dataLen =  atoi(s[3].str().c_str());
 			size_t endByte = 0;
 			size_t count = int(ceil(dataLen / MAX_READ));
@@ -189,7 +190,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			}
 			q.p_dataOutput = new char[dataLen + 2 ];//std::shared_ptr<char>(new char[dataLen + 2], std::default_delete<char[]>());
 			memset(q.p_dataOutput, 0, sizeof(char) * dataLen + 2);
-			INFO("Looping for %d, freemem %d", count, ESP.getFreeHeap());
+			INFO_D("Looping for %d, freemem %d", count, ESP.getFreeHeap());
 			for (size_t i = 0; i <= count; i++)
 			{
 				std::stringstream strcmd;
@@ -223,10 +224,10 @@ void HttpSimcom::HttpDo(HttpRequest req,
 							readLen = dataLen - startingByte ;
 						}
 						memcpy(q.p_dataOutput + startingByte, p_data + cutHttpReadPart, readLen);
-						INFO("[WARN] Queue nr %d", i);						
-						//INFO("Msg len %d content  %.*s",  readLen,  readLen, p_data + cutHttpReadPart); 
-						//INFO("Msg total %s", q.p_dataOutput);
-						//INFO("Msg len %d content  %.*s",  readLen,  readLen, p_data); 
+						INFO_D("[WARN] Queue nr %d", i);						
+						//INFO_D("Msg len %d content  %.*s",  readLen,  readLen, p_data + cutHttpReadPart); 
+						//INFO_D("Msg total %s", q.p_dataOutput);
+						//INFO_D("Msg len %d content  %.*s",  readLen,  readLen, p_data); 
 
 					},
 					nullptr, true
@@ -237,7 +238,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		},
 		[=]() 
 		{ 
-			INFO("Timed out!"); 
+			INFO_D("Timed out!"); 
 			HttpResponse res;
 			res.code = HttpStatusCode::Timeout;
 			if(m_queue.size() > 0)
@@ -252,7 +253,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 				200, 200, 
 				[](std::smatch  &s, char* p_data) 
 				{ 
-					INFO("HTTP terminated.");
+					INFO_D("HTTP terminated.");
 				}
 			));
 		}
@@ -275,43 +276,170 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			q.callSuccess(res);
 			delete []q.p_dataOutput;
 			m_queue.pop();
-			INFO("HTTP terminated succesfully."); 
+			INFO_D("HTTP terminated succesfully."); 
 		}
 	);
 	m_serialModem->Enqueue(p);
 }
 
-float HttpSimcom::InternetTest()
+float HttpSimcom::InternetTest(size_t len)
 {
-	const int numOfTrial = 10;
+	const int numOfTrial = 50	;
 	const int httpTimeout = 30;
+	m_speedCount = 0;
+	m_speedCountLoss = 0;
+	m_avgSpeed.clear();
     unsigned long timeout = millis();
 	bool bIscompleted = false;
+	std::stringstream httpReq ;
+
+	httpReq << "http://35.240.207.36/api/values/" << len;
+
 	auto successCallback = [this](HttpResponse &res)
 	{
 		if(res.code == HttpStatusCode::OK)
-			m_dtSpeedTest.push_back(float(res.timeTaken / 1000)); //nb pls substract with tcp handshake too.
+		{
+			INFO("CODE %d, TIME %lu, download %d B ", res.code, res.timeTaken, res.length);
+			float speed = res.length / float(float(res.timeTaken) / 1000);
+			m_avgSpeed.push_back(speed);
+			INFO("Downlink throughput = %f B/s", speed);
+			m_speedCount++;
+			INFO("Count %d", m_speedCount);
+
+		}
+		else
+		{
+			INFO("Timeout, counted as loss.");
+			m_avgSpeed.push_back(0);
+			m_speedCount++;
+			m_speedCountLoss++;
+			INFO("Count %d", m_speedCount);
+
+		}
 	};
 
 	auto failcallback = [this](HttpResponse &res)
 	{
-		INFO_D("fail to download");
+		INFO("fail to download");
+		m_avgSpeed.push_back(0);
+		m_speedCount++;
+		m_speedCountLoss++;
+		INFO("Count %d", m_speedCount);
 	};
+
 	for (size_t i = 0; i < numOfTrial; i++)
 	{
 		HttpRequest req;
 		req.bGetResult = false;
-		req.url = "http://35.240.207.36/api/values/15000";
+		req.url = httpReq.str().c_str();
+		req.action = ActionHttp::Get;
 		HttpDo(req, successCallback, failcallback, httpTimeout);
 	}
 	
-	while(millis() - timeout < numOfTrial * httpTimeout * 1000 && m_dtSpeedTest.size() < numOfTrial )
+	while(m_speedCount < numOfTrial )
 	{
 		
 	}
-	float result = std::accumulate(m_dtSpeedTest.begin(), m_dtSpeedTest.end(), 0) / m_dtSpeedTest.size();
-	result = 15000 / (result * 1000);
 
-	INFO("download speed is %f KB/s, after many %d trial", result, m_dtSpeedTest.size());
+
+	float result = std::accumulate(m_avgSpeed.begin(), m_avgSpeed.end(), 0);
+	if(result > 0)
+	{
+		result = result / m_avgSpeed.size();
+	}
+
+	INFO("average downlink speed is %f B/s, after many %d trial, packet loss %d", result, m_avgSpeed.size(), m_speedCountLoss);
+	return result;
+}
+
+
+float HttpSimcom::InternetUploadTest(size_t len, unsigned int interation)
+{
+	if(len * interation > ESP.getFreeHeap() - 500)
+	{
+		ERROR("This operation might cause heap to be full. Aborting..., free heap is %d B", ESP.getFreeHeap());
+		return 0;
+	}
+	const int numOfTrial = interation;
+	const int httpTimeout = 30;
+	m_speedCount = 0;
+	m_speedCountLoss = 0;
+	m_avgSpeed.clear();
+    unsigned long timeout = millis();
+	bool bIscompleted = false;
+	std::stringstream httpReq ;
+	char *data = new char[len+3];
+	memset(data, 0, sizeof(char)*len+2);
+	memset(data+1, 'A', sizeof(char)*len);
+	data[0] = '"';
+	data[len+1] = '"';
+	//INFO("dummy data was allocated for upload");
+
+	auto successCallback = [this, len](HttpResponse &res)
+	{
+		if(res.code == HttpStatusCode::OK)
+		{
+			INFO("CODE %d, TIME %lu", res.code, res.timeTaken);
+			float speed = len / float(float(res.timeTaken) / 1000);
+			m_avgSpeed.push_back(speed);
+			INFO("Uplink throughput = %f B/s", speed);
+			m_speedCount++;
+			INFO("Count %d", m_speedCount);
+
+		}
+		else
+		{
+			INFO("Timeout, counted as loss.");
+			m_avgSpeed.push_back(0);
+			m_speedCount++;
+			INFO("Count %d", m_speedCount);
+
+		}
+	};
+
+	auto failcallback = [this](HttpResponse &res)
+	{
+		INFO("fail to upload");
+		m_avgSpeed.push_back(0);
+		m_speedCount++;
+		INFO("Count %d", m_speedCount);
+	};
+
+	//INFO("queue now");
+
+
+	for (size_t i = 0; i < numOfTrial; i++)
+	{
+		HttpRequest req;
+		req.bGetResult = false;
+		req.url = "http://35.240.207.36/api/values/";
+		//INFO("ok1");
+		req.data = (const char*)data;
+		std::map<std::string,std::string> userdata = 
+		{{ "Content-Type", "application/json" }};
+		//INFO("ok2");
+		req.header = userdata;
+		req.action = ActionHttp::Post;
+		req.length = len+3;
+		//INFO("ok3");
+		HttpDo(req, successCallback, failcallback, httpTimeout);
+		//INFO("ok4");
+	}
+	
+	//INFO("running...");
+
+	while(m_speedCount < numOfTrial )
+	{
+		
+	}
+
+
+	float result = std::accumulate(m_avgSpeed.begin(), m_avgSpeed.end(), 0);
+	if(result > 0)
+	{
+		result = result / m_avgSpeed.size();
+	}
+	delete []data;
+	INFO("average downlink speed is %f B/s, after many %d trial, packet loss %d", result, m_avgSpeed.size(), m_speedCountLoss);
 	return result;
 }

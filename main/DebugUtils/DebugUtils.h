@@ -26,6 +26,16 @@ static constexpr cstr past_last_slash(cstr str)
 #define INFO_D(...) { Serial.printf("debug [INFO ]  %s (%d) =>", __SHORT_FILE__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}
 #define ERROR_D(...) { Serial.printf("debug [ERROR]  %s (%d) =>", __SHORT_FILE__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}	
 
+#define _DEBUG_ON 1
+
+#ifdef _DEBUG_ON
+	#undef INFO_D
+	#undef ERROR_D
+
+	#define INFO_D(...) {};
+	#define ERROR_D(...) {};
+#endif
+//end
 
 #define HEAP_CHECK() if(!heap_caps_check_integrity_all(true)) { FATAL("HEAP ERROR AT %s %d", __SHORT_FILE__, __LINE__); }
 //#define INFO(...) { Serial.printf("Info :"); Serial.printf(__VA_ARGS__); }

@@ -144,8 +144,8 @@ public:
                 std::function<void(HttpResponse &)> callbackSuccess,
                 std::function<void(HttpResponse &)> callbackFail,
                 unsigned int timeout = 60);
-    float InternetTest();
-
+    float InternetTest(size_t len = 30000);
+    float InternetUploadTest(size_t len = 1000, unsigned int interation = 50);
     ~HttpSimcom();
 
 private:
@@ -175,7 +175,9 @@ private:
     std::queue<HttpQueue> m_queue;
     unsigned int          m_counter;
 
-	std::vector<float> m_dtSpeedTest;
+	std::vector<float> m_avgSpeed;
+    unsigned int m_speedCount;
+    unsigned int m_speedCountLoss;
 
 };
 

@@ -403,7 +403,7 @@ void SerialModem::SetEdrx(uint8_t edrxVal)
 		Command *c = new Command
 		(
 			edrxCommand.str().c_str(),
-			"OK",2000, 100, 
+			"OK", 2000, 100, 
 			[](std::smatch &s, char *)
 			{
 				INFO("EDRX value has been set");
@@ -495,6 +495,11 @@ const char * SerialModem::GetProviderName()
 
 void SerialModem::ConnectGPRS(const char * apn, const char * username, const char * pass, unsigned int retry)
 {
+	if(m_isBusy)
+	{
+		INFO("Modem is busy");
+		return;
+	}
 	std::stringstream gprsCmd;
 	std::stringstream atSapbrApn, atSapbrUser, atSapbrPass;
 	atSapbrApn << "AT+SAPBR=3,1,\""<< "APN" << "\",\"" << apn << "\"";
@@ -527,7 +532,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			{
 				INFO_D("GPRS should be disconnected now");
 			},
-			[this](){ m_isBusy = false; }
+			[this](){  }
 		);
 	cmd->Chain(
 		"AT+CGATT=0",
@@ -537,7 +542,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO_D("deegistered to net");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		"AT+CGATT=1",
 		"OK",
@@ -546,7 +551,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO("Registered to net");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		"AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"",
 		"OK",
@@ -555,7 +560,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO_D("Bearer set to GPRS");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		atSapbrApn.str().c_str(),
 		"OK",
@@ -564,7 +569,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO("Bearer APN set");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		atSapbrUser.str().c_str(),
 		"OK",
@@ -573,7 +578,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO("Bearer user set");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		atSapbrPass.str().c_str(),
 		"OK",
@@ -582,7 +587,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO("Bearer pass set");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		gprsCmd.str().c_str(),
 		"OK",
@@ -591,7 +596,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO("GPRS APN set");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		"AT+CIICR",
 		"OK",
@@ -600,7 +605,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		{
 			INFO("Querying IP...");
 		},
-		[this](){ m_isBusy = false; }
+		[this](){  }
 	)->Chain(
 		"AT+CIFSR",
 		"([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)",
@@ -618,7 +623,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		[this]()
 		{
 			ERROR("FAIL to connect GPRS");
-			m_isBusy = false;
+			
 		}
 	)->Chain(
 		"AT+SAPBR=1,1", 
@@ -632,7 +637,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		[this]()
 		{
 			ERROR("FAIL to connect GPRS");
-			m_isBusy = false;
+			
 		}
 	);
 	m_isBusy = true;
