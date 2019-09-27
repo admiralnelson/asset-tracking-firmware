@@ -15,7 +15,7 @@
 #define MAX_BUFFER 257
 #define MAX_RETRY 20
 #define REFRESH_RATE_MS 3000
-
+#define FAIL_COUNT 20
 
 
 class SerialModem
@@ -130,11 +130,16 @@ public:
 			length = dataLen;
 			HEAP_CHECK();
 		}
+		unsigned long GetRoundTripTime()
+		{
+			return _rtt;
+		}
 		IPAddress _ipAddr;
 		char 	*data = nullptr;
 		char 	*domain = nullptr;
 		unsigned int port = 1000;
 		unsigned int length = 0;
+		unsigned long _rtt = 0;
 		~UdpPacket()
 		{
 			INFO_D("data array value %p", data);
@@ -170,6 +175,7 @@ public:
 
 		UdpPacket *dataToSend = nullptr;
 		unsigned int timeout = 1000;
+		unsigned long _timestamp = 0;
 		std::function<void(UdpPacket &udp)> callbackOnReceive;
 		std::function<void()> callbackOnTimeout;
 		~UdpRequest()
@@ -245,6 +251,7 @@ protected:
 	};
 	
 	int					m_signal = 0;
+	int					m_edrxVal = 0;
 	ENetworkStatus		m_networkStatus;
 	std::string			m_internetApn;
 	std::string			m_internetUsername;
@@ -258,6 +265,7 @@ protected:
 	TaskHandle_t		 m_task;
 	IPAddress			 m_ipaddr;
 	ENetworkType		 m_netPreffered;
+	int					 m_failCount;
 	char				 *m_serialBuffer;
 	bool				 m_isReady	   = false;
 	bool				 m_isGprsReady = false;

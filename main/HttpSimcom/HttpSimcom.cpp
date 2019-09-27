@@ -282,10 +282,10 @@ void HttpSimcom::HttpDo(HttpRequest req,
 	m_serialModem->Enqueue(p);
 }
 
-float HttpSimcom::InternetTest(size_t len)
+float HttpSimcom::InternetTest(size_t len, unsigned int interation)
 {
-	const int numOfTrial = 50	;
-	const int httpTimeout = 30;
+	const int numOfTrial = interation;
+	const int httpTimeout = 60;
 	m_speedCount = 0;
 	m_speedCountLoss = 0;
 	m_avgSpeed.clear();
@@ -309,7 +309,7 @@ float HttpSimcom::InternetTest(size_t len)
 		}
 		else
 		{
-			INFO("Timeout, counted as loss.");
+			INFO("Timeout, counted as loss. CODE %d,", res.code);
 			m_avgSpeed.push_back(0);
 			m_speedCount++;
 			m_speedCountLoss++;
@@ -355,13 +355,13 @@ float HttpSimcom::InternetTest(size_t len)
 
 float HttpSimcom::InternetUploadTest(size_t len, unsigned int interation)
 {
-	if(len * interation > ESP.getFreeHeap() - 500)
+	if(len * interation > ESP.getFreeHeap() - 10000)
 	{
 		ERROR("This operation might cause heap to be full. Aborting..., free heap is %d B", ESP.getFreeHeap());
 		return 0;
 	}
 	const int numOfTrial = interation;
-	const int httpTimeout = 30;
+	const int httpTimeout = 60;
 	m_speedCount = 0;
 	m_speedCountLoss = 0;
 	m_avgSpeed.clear();
@@ -389,9 +389,10 @@ float HttpSimcom::InternetUploadTest(size_t len, unsigned int interation)
 		}
 		else
 		{
-			INFO("Timeout, counted as loss.");
+			INFO("Timeout, counted as loss. CODE %d", res.code);
 			m_avgSpeed.push_back(0);
 			m_speedCount++;
+			m_speedCountLoss++;
 			INFO("Count %d", m_speedCount);
 
 		}
@@ -402,6 +403,7 @@ float HttpSimcom::InternetUploadTest(size_t len, unsigned int interation)
 		INFO("fail to upload");
 		m_avgSpeed.push_back(0);
 		m_speedCount++;
+		m_speedCountLoss++;
 		INFO("Count %d", m_speedCount);
 	};
 
@@ -440,6 +442,6 @@ float HttpSimcom::InternetUploadTest(size_t len, unsigned int interation)
 		result = result / m_avgSpeed.size();
 	}
 	delete []data;
-	INFO("average downlink speed is %f B/s, after many %d trial, packet loss %d", result, m_avgSpeed.size(), m_speedCountLoss);
+	INFO("average uplink speed is %f B/s, after many %d trial, packet loss %d", result, m_avgSpeed.size(), m_speedCountLoss);
 	return result;
 }

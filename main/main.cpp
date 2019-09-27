@@ -11,6 +11,10 @@
 #include <functional>
 #include <map>
 #include <vector>
+#include <sstream>
+#include <numeric>
+#include <algorithm>
+
 #define RXD2 16
 #define TXD2 17
 #define MAX_CHAR 4000
@@ -20,7 +24,9 @@ SerialModem *p_Modem = new SerialModem();
 HttpSimcom *p_http;
 HardwareSerial hardwareSerial(2);
 const char *p_rawData = "test";
+int udpDataNo = 0;
 
+const char *p_udpData = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 void InitHTTP();
 void PostDataTest();
@@ -107,10 +113,31 @@ void loop()
 	 		//PostDataTest();
 			//InitHTTP();
 			//p_Modem->MeasureTCPHandshakeTime(20);
-			INFO("Internet speed test. This thread will be busy. Testing Upload for 5KB");
-			p_http->InternetUploadTest(5000, 20);
-			INFO("done");
-			//DownloadNovelProcedure();
+
+			// INFO("Internet speed test. This thread will be busy. Testing download for 10KB");			
+			// p_http->InternetTest(10000, 50);
+			// INFO("done");			
+			
+			
+			// for (size_t i = 0; i < 2; i++)
+			// {
+			// 	INFO("Internet speed test. This thread will be busy. Testing Upload for 1KB");
+			// 	p_http->InternetUploadTest(1000, 25);
+			// 	INFO("done");
+			// }
+			// INFO("Internet speed test. This thread will be busy. Testing Download for 5KB");
+			// p_http->InternetTest(5000, 50);
+			// INFO("done");			
+			 //DownloadNovelProcedure();
+			//INFO("first iteration");
+			//UdpTest();
+			//INFO("second iteration");
+			UdpTest();
+			//for (size_t i = 0; i < 10; i++)
+			//{
+			// 	DownloadNovelProcedure();
+			//}
+			
 			executeOnce = true;
 		 }
 	}
@@ -118,18 +145,33 @@ void loop()
 
 void UdpTest()
 {
-	INFO("UDP test");
-
-	SerialModem::UdpRequest req ("test data", "35.240.207.36", 1257, 10000,
-		[](SerialModem::UdpPacket &udp)
-		{
-			INFO("Received udp reply packet from %s:%d", udp.domain, udp.port);
-			INFO("Data %s", udp.data);
-		}
-	);
-	p_Modem->SendUdp(req);
-	INFO("UDP request queued");
-
+	std::vector<float> rttUdpData;
+	for (udpDataNo = 0; udpDataNo < 25; udpDataNo++)
+	{
+		INFO("UDP test");
+		std::stringstream data;
+		data << "nr." << udpDataNo << " " << p_udpData;
+		SerialModem::UdpRequest req (data.str().c_str(), "35.240.207.36", 1257, 10000,
+			[&rttUdpData](SerialModem::UdpPacket &udp)
+			{
+				INFO("Received udp reply packet from %s:%d, rtt:%lu ms", udp.domain, udp.port, udp.GetRoundTripTime());
+				INFO("Data %s", udp.data);
+				rttUdpData.push_back(float(udp.GetRoundTripTime()));
+			},
+			[&rttUdpData]()
+			{
+				INFO("Timed out");
+				rttUdpData.push_back(0);
+			}
+		);
+		p_Modem->SendUdp(req);
+		INFO("UDP request queued, %d", udpDataNo);
+	}
+	while(rttUdpData.size() < 25)
+	{}
+	float avg = std::accumulate(rttUdpData.begin(), rttUdpData.end(), 0) / 25;
+	int timedout = std::count_if(rttUdpData.begin(), rttUdpData.end(), [](float f){ return f == 0; });
+	INFO("Measuring done, average rtt: %f, timeouts: %d", avg, timedout);
 }
 
 void PostDataTest()

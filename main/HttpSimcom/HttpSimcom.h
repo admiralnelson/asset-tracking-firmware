@@ -144,7 +144,7 @@ public:
                 std::function<void(HttpResponse &)> callbackSuccess,
                 std::function<void(HttpResponse &)> callbackFail,
                 unsigned int timeout = 60);
-    float InternetTest(size_t len = 30000);
+    float InternetTest(size_t len = 30000, unsigned int interation = 50);
     float InternetUploadTest(size_t len = 1000, unsigned int interation = 50);
     ~HttpSimcom();
 

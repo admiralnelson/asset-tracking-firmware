@@ -57,6 +57,14 @@ void SerialModem::Loop()
 			);
 			HEAP_CHECK(); //BANG, ERROR JIKA TOTAL STRING COMMAND > 100. note was FIXED
 			vTaskDelay(cmd->waitBeforeWrite / portTICK_PERIOD_MS);
+			if(m_failCount > FAIL_COUNT)
+			{
+				for (size_t i = 0; i < 10; i++)
+				{
+					m_serialStream->println("ATE0");
+				}
+				m_failCount = 0;
+			}
 			if(cmd->commandLength > 0)
 			{
 				if(cmd->m_bAppendNewLine)
@@ -83,7 +91,7 @@ void SerialModem::Loop()
 		{
 			if(millis() - lastTime > REFRESH_RATE_MS)
 			{
-				Enqueue(new Command("ATE0", "OK", 100,100));
+				Enqueue(new Command("ATE0", "OK", 100,0));
 				Enqueue(new SerialModem::Command(
 					"AT+COPS?",
 					"([0-9]*),([0-9]*),\"(.*)?\",([0-9]*)", 0, 100,
@@ -149,6 +157,8 @@ void SerialModem::Loop()
 						m_netPreffered = EUNKNOWN;
 					}
 				));
+				
+
 				lastTime = millis();	
 			}
 			
@@ -203,6 +213,7 @@ void SerialModem::Loop()
 							}
 						}
 						success = true;
+						m_failCount = 0;
 						if(cmd->nextChain != nullptr)
 						{
 							ForceEnqueue(cmd->nextChain);
@@ -222,6 +233,7 @@ void SerialModem::Loop()
 				HEAP_CHECK();
 				if (!success)
 				{
+					m_failCount++;
 					(*cmdw)->isAlreadyCalled = true;
 					if ((*cmdw)->failCallback != nullptr)
 					{
@@ -297,7 +309,8 @@ void SerialModem::ForceEnqueue(Command *cmd)
 void SerialModem::SendUdp(UdpRequest udpReq)
 {
 	std::stringstream cipstartUdp;
-	cipstartUdp << "AT+CIPSTART=" << "\"UDP\"," << "\"" << udpReq.dataToSend->domain << "\"," << udpReq.dataToSend->port;   
+	cipstartUdp << "AT+CIPSTART=" << "\"UDP\"," << "\"" << udpReq.dataToSend->domain << "\"," << udpReq.dataToSend->port; 
+	
 	m_udpQueue.push_back(udpReq);
 	Command *c = new Command(
 		"AT+CIPSRIP=1", 
@@ -327,7 +340,12 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 	)->Chain(
 		"\032",
 		"SEND OK", 
-		5000, 0
+		5000, 0, 
+		[this](std::smatch &s, char* p_data)
+		{
+			UdpRequest &q = m_udpQueue.front();
+			q._timestamp = millis();
+		}
 	)->Chain(
 		"",
 		"^\r\nRECV FROM:([0-9]*).([0-9]*).([0-9]*).([0-9]*):([0-9]*)",
@@ -348,6 +366,7 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 							   + 2 ;
 			UdpRequest &udp = m_udpQueue.front();
 			UdpPacket udpPack((const char*)p_data + offset, addr.toString().c_str(), port);
+			udpPack._rtt = (millis() - 10) - udp._timestamp;
 			HEAP_CHECK();
 			INFO_D("udpacket data %s", udpPack.data);
 			INFO_D("udpacket domain %s", udpPack.domain);
@@ -664,6 +683,7 @@ void SerialModem::Begin(Stream *serialStream)
 		m_isReady = true;
 		INFO("Modem is ready!");
 		m_serialStream->println("ATE0");
+		delay(100);
 		m_serialStream->println("AT+CLTS=1");
 		std::string s = ReadSerial();
 		INFO("%s", s.c_str());
@@ -702,14 +722,26 @@ void SerialModem::SetPrefferedNetwork(ENetworkType net)
 	);
 	c->Chain(
 		"AT+CFUN=1,1",
-		"OK", 10000, 0, 
+		"OK", 10000, 0,
+		[=](std::smatch &s, char *p)
+		{
+			INFO("Changing net...");	
+		},
+		[](){ ERROR("Failed to switch network");  }
+	)->Chain
+	(
+		"","",1000,60000
+	)->Chain
+	(
+		"ATE0","OK",10000, 0,
 		[=](std::smatch &s, char *p)
 		{
 			INFO("Success switched net!");	
+		},
+		[=]()
+		{
+			ERROR("Failed to switched net!");
 		}
-	)->Chain
-	(
-		"","",1000,20000
 	);
 
 	if(net == ECATM)
