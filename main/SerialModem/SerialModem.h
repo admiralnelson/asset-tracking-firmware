@@ -11,16 +11,31 @@
 #include <algorithm>
 #include <functional>
 #include <../DebugUtils/DebugUtils.h>
+#include <../Gps/MicroNMEA.h>
+#include <time.h>
 
 #define MAX_BUFFER 257
 #define MAX_RETRY 20
 #define REFRESH_RATE_MS 3000
+#define NMEA_BUFFER 80
 #define FAIL_COUNT 20
 
 
 class SerialModem
 {
 public:
+	struct Location
+	{
+		double latitude;
+		double longitude;
+		double altitude;
+		float hdop;
+		float speed;
+		unsigned int satteliteCount;
+		double course;
+		tm gpsTime;
+	};
+
 	struct Command
 	{
 		Command(const char * _command, 
@@ -253,24 +268,39 @@ protected:
 	int					m_signal = 0;
 	int					m_edrxVal = 0;
 	ENetworkStatus		m_networkStatus;
+	ENetworkType		 m_netPreffered;
+	bool				 m_isGprsReady = false;
+	bool 				 m_isIgnoringNetState = false;
+	std::string			m_imei;
+
 	std::string			m_internetApn;
 	std::string			m_internetUsername;
 	std::string			m_internetPassword;
 	std::string			m_providerName;
+	IPAddress			 m_ipaddr;
+
 	std::deque<Command*> m_cmdsQueue;
 	std::deque<Command*> m_onHoldQueue;
-	std::deque<UdpRequest> m_udpQueue;
 	std::vector<CommandWait*> m_cmdWaitingList;
+
+	std::deque<UdpRequest> m_udpQueue;
+	
 	Stream				 *m_serialStream;
-	TaskHandle_t		 m_task;
-	IPAddress			 m_ipaddr;
-	ENetworkType		 m_netPreffered;
-	int					 m_failCount;
 	char				 *m_serialBuffer;
-	bool				 m_isReady	   = false;
-	bool				 m_isGprsReady = false;
-	bool 				 m_isIgnoringNetState = false;
+
+	char				 m_nmeaBuffer[NMEA_BUFFER];
+	std::function<void(Location&)> m_gpsCallbackSuccess;
+	std::function<void()> m_gpsCallbackTimeout;
+	int 				 m_gpsTimeout;
+	
+	TaskHandle_t		 m_task;
+	
+	int					 m_failCount;
+	
+	bool			 	 m_isReady	 = false;
+	
 	bool 				 m_isBusy = false;
+	bool 				 m_isGpsOn = false;
 	
 public:
 	SerialModem();
@@ -283,7 +313,8 @@ public:
 	void 	SetEdrx(uint8_t edrxVal);
 	int		GetSignal();
 	const char	 *GetProviderName();
-	void		 ConnectGPRS(const char * apn,const char *username, const char *pass, unsigned int retry);
+	const char 	 *GetIMEI();
+	void		 ConnectGPRS(const char * apn,const char *username, const char *pass, unsigned int retry = 3);
 	ENetworkStatus	GetNetworkStatus()
 	{
 		return m_networkStatus;
@@ -300,6 +331,7 @@ public:
 	{
 		return m_isBusy;
 	}
+	
 	void 		SetPrefferedNetwork(ENetworkType net);
 	ENetworkType GetPrefferedNetwork();
 	~SerialModem()
@@ -307,6 +339,10 @@ public:
 		vTaskDelete(m_task);
 		delete []m_serialBuffer;
 	}
+	void TurnOnGps(std::function<void(Location)> callback, 
+				   unsigned int timeout = 60*1000*5, 
+				   std::function<void()> failCallback = nullptr);
+	void TurnOffGps();
 
 protected:
 	void		Loop();

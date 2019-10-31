@@ -105,6 +105,7 @@ public:
         size_t length    = 0;
         ActionHttp action;
         std::map<std::string, std::string> header;
+        std::string contentType = "";
         bool bGetResult = true;
     };
 

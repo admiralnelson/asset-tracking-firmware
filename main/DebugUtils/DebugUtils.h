@@ -26,9 +26,9 @@ static constexpr cstr past_last_slash(cstr str)
 #define INFO_D(...) { Serial.printf("debug [INFO ]  %s (%d) =>", __SHORT_FILE__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}
 #define ERROR_D(...) { Serial.printf("debug [ERROR]  %s (%d) =>", __SHORT_FILE__, __LINE__); Serial.printf(__VA_ARGS__); Serial.println();}	
 
-#define _DEBUG_ON 1
+#define _DEBUG_OFF 0
 
-#ifdef _DEBUG_ON
+#ifdef _DEBUG_OFF
 	#undef INFO_D
 	#undef ERROR_D
 

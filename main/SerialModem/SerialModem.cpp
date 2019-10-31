@@ -18,6 +18,7 @@ void SerialModem::Loop()
 	static unsigned int lastTime = 0 ;
 	Command* cmd = nullptr;
 
+
 	while (true)
 	{
 		if (!m_isReady)
@@ -39,14 +40,14 @@ void SerialModem::Loop()
 
 			if (!bcommonCmd)
 			{
-				INFO_D("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
+				INFO("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
 			}
 			if(cmd->nextChain != nullptr)
 			{
 				//we entered chained mode, 
 				m_isBusy = true;
 			}
-			//INFO_D("QUEUED and sorted! expects %s for command %s", cmd->expects, cmd->command);
+			//INFO("QUEUED and sorted! expects %s for command %s", cmd->expects, cmd->command);
 			m_cmdWaitingList.push_back(new CommandWait(
 				(const char *)cmd->expects,
 				(const char *)cmd->command,
@@ -80,7 +81,7 @@ void SerialModem::Loop()
 			vTaskDelay(cmd->delay / portTICK_PERIOD_MS);
 			if (cmd->delay > 100)
 			{
-				INFO_D("Write procedure was halted by %d", cmd->delay);
+				INFO("Write procedure was halted by %d", cmd->delay);
 			}
 			if(!cmd->m_isDoitUntilSuccess)
 			{
@@ -178,14 +179,71 @@ void SerialModem::Loop()
 				int timeNow = millis();
 				bool success = false;
 				bool alreadyCalled = (*cmdw)->isAlreadyCalled;
+				MicroNMEA gpsParser(m_nmeaBuffer, sizeof(m_nmeaBuffer));
 				do
 				{
+					read_nmea_string_again:
 					serialResult = ReadSerial();
+
+					if(m_isGpsOn)
+					{
+						if( millis() - timeNow > m_gpsTimeout)
+						{
+							if(m_gpsCallbackTimeout != nullptr)
+							{
+								m_gpsCallbackTimeout();
+							}
+							ERROR("GPS fix timed out!");
+							TurnOffGps();
+						}
+						if(serialResult.length() > 0)
+						{
+							INFO("NMEA string: %s", serialResult.c_str());
+							for (char &c : serialResult)
+							{
+								gpsParser.process(c);							
+							}
+							if(!gpsParser.isValid())
+							{
+								goto read_nmea_string_again;
+							}
+							else
+							{
+								INFO("GPS location LAT: %ld, LONG: %ld", gpsParser.getLatitude(), gpsParser.getLongitude());
+								Location loc;
+								loc.longitude = (double)gpsParser.getLongitude() / 1000000;
+								loc.latitude = (double) gpsParser.getLatitude() / 1000000;
+								long alt;
+								loc.altitude = (gpsParser.getAltitude(alt)) ? (double) alt / 1000000 : NAN;								
+								loc.speed = (double)gpsParser.getSpeed() / 1000000;
+								loc.course = (double)gpsParser.getCourse() / 1000000;
+								loc.hdop = (float)gpsParser.getHDOP() / 10;
+
+								loc.gpsTime.tm_sec = gpsParser.getSecond();
+								loc.gpsTime.tm_min = gpsParser.getMinute();
+								loc.gpsTime.tm_hour = gpsParser.getHour();
+
+								loc.gpsTime.tm_mday = gpsParser.getDay();
+								loc.gpsTime.tm_mon = gpsParser.getMonth();
+								loc.gpsTime.tm_year = gpsParser.getYear();
+
+								INFO("GPS CALLBACK SHOULD BE CALLED!");
+								m_gpsCallbackSuccess(loc);
+								TurnOffGps();
+							}
+						}
+						else
+						{
+							goto read_nmea_string_again;
+						}
+						
+					}
+
 					/*bool bcommonCmd = strcmp("AT+COPS?", (const char*)(*cmdw)->command) == 0;
 					bcommonCmd = bcommonCmd || strcmp("AT+CSQ", (const char*)(*cmdw)->command) == 0;
 					if (!bcommonCmd && serialResult.size() > 0)
 					{
-						INFO_D("Current serial data %s", serialResult.c_str());
+						INFO("Current serial data %s", serialResult.c_str());
 					}*/
 
 					std::smatch matchForPDP;
@@ -204,7 +262,7 @@ void SerialModem::Loop()
 							// bcommonCmd = bcommonCmd || strcmp("AT+CSQ", (const char*)(*cmdw)->command) == 0;
 							// if (!bcommonCmd && strlen(serialResult) > 0)
 							// {
-							// 	INFO_D("Current serial data (truncated) %s", serialResult.c_str());
+							// 	INFO("Current serial data (truncated) %s", serialResult.c_str());
 							// }
 							(*cmdw)->successCallback(p_matches, m_serialBuffer);
 							if(cmd->m_isDoitUntilSuccess)
@@ -224,7 +282,7 @@ void SerialModem::Loop()
 							m_isBusy = false;
 						}
 						delete cmd;
-						//INFO_D("SUCCESS! isAlreadyCalled %d", (*cmdw)->isAlreadyCalled);
+						//INFO("SUCCESS! isAlreadyCalled %d", (*cmdw)->isAlreadyCalled);
 					}
 					alreadyCalled = (*cmdw)->isAlreadyCalled;
 
@@ -239,10 +297,10 @@ void SerialModem::Loop()
 					{
 						(*cmdw)->failCallback();
 					}
-					ERROR_D("None match for command (truncated) %s -> %s", (*cmdw)->command, serialResult.c_str());
+					ERROR("None match for command (truncated) %s -> %s", (*cmdw)->command, serialResult.c_str());
 					if(cmd->m_isDoitUntilSuccess)
 					{
-						INFO_D("Redoing for command, %s", cmd->command);
+						INFO("Redoing for command, %s", cmd->command);
 					}
 					else
 					{
@@ -284,7 +342,7 @@ void SerialModem::StartTaskImplLoop(void * thisObject)
 {
 	INFO("STARTING WRITE LOOP TASK, %x", (unsigned int)thisObject);
 	static_cast<SerialModem*>(thisObject)->Loop();
-	INFO_D("DONE");
+	INFO("DONE");
 
 }
 
@@ -304,6 +362,7 @@ void SerialModem::Enqueue(Command *cmd)
 void SerialModem::ForceEnqueue(Command *cmd)
 {
 	m_cmdsQueue.push_front(cmd);
+	INFO("FORCE ENQUE %s", m_cmdsQueue.front()->command);
 }
 
 void SerialModem::SendUdp(UdpRequest udpReq)
@@ -368,15 +427,15 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 			UdpPacket udpPack((const char*)p_data + offset, addr.toString().c_str(), port);
 			udpPack._rtt = (millis() - 10) - udp._timestamp;
 			HEAP_CHECK();
-			INFO_D("udpacket data %s", udpPack.data);
-			INFO_D("udpacket domain %s", udpPack.domain);
+			INFO("udpacket data %s", udpPack.data);
+			INFO("udpacket domain %s", udpPack.domain);
 			if(udp.callbackOnReceive != nullptr)
 			{
 				udp.callbackOnReceive(udpPack);
 			}
-			INFO_D("udp callbac should be executed");
+			INFO("udp callbac should be executed");
 			m_udpQueue.pop_front();
-			INFO_D("deque");
+			INFO("deque");
 
 		},
 		[=]()
@@ -386,7 +445,7 @@ void SerialModem::SendUdp(UdpRequest udpReq)
 			{
 				udp.callbackOnTimeout();
 			}
-			INFO_D("udp callbac should be executed");
+			INFO("udp callbac should be executed");
 			m_udpQueue.pop_front();
 			ForceEnqueue(new Command(
 				"AT+CIPCLOSE",
@@ -481,7 +540,7 @@ void SerialModem::MeasureTCPHandshakeTime(unsigned int howManyTime, const char *
 			20000,500, 
 			[](std::smatch &s, char *p)
 			{
-				INFO_D("Connection success!");
+				INFO("Connection success!");
 			},
 			[=]()
 			{
@@ -511,6 +570,10 @@ const char * SerialModem::GetProviderName()
 	return m_providerName.c_str();
 }
 
+const char * SerialModem::GetIMEI()
+{
+	return m_imei.c_str();
+}
 
 void SerialModem::ConnectGPRS(const char * apn, const char * username, const char * pass, unsigned int retry)
 {
@@ -549,7 +612,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 			1000, 1000,
 			[this](std::smatch  &m, char* p_data)
 			{
-				INFO_D("GPRS should be disconnected now");
+				INFO("GPRS should be disconnected now");
 			},
 			[this](){  }
 		);
@@ -559,7 +622,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		5000, 3000,
 		[this](std::smatch  &m, char* p_data)
 		{
-			INFO_D("deegistered to net");
+			INFO("deegistered to net");
 		},
 		[this](){  }
 	)->Chain(
@@ -577,7 +640,7 @@ void SerialModem::ConnectGPRS(const char * apn, const char * username, const cha
 		1000, 100,
 		[this](std::smatch  &m, char* p_data)
 		{
-			INFO_D("Bearer set to GPRS");
+			INFO("Bearer set to GPRS");
 		},
 		[this](){  }
 	)->Chain(
@@ -687,7 +750,17 @@ void SerialModem::Begin(Stream *serialStream)
 		m_serialStream->println("AT+CLTS=1");
 		std::string s = ReadSerial();
 		INFO("%s", s.c_str());
+		Enqueue(new Command
+		(
+			"AT+CGSN", "^\r\n([0-9]+)", 1000, 100,
+			[this](std::smatch &s, char *c)
+			{
+				INFO("Serial number is %s", s[1].str().c_str());
+				m_imei = s[1].str();
+			}
+		));
 		xTaskCreatePinnedToCore(this->StartTaskImplLoop, "SerialModem_Loop", 16384 * 2, this, 1,  &m_task, 1);
+		
 	}
 	else
 	{
@@ -715,40 +788,22 @@ void SerialModem::SetPrefferedNetwork(ENetworkType net)
 		break;
 	};
 
+	INFO("Changing net...");
 	Command *c  = new Command(
 		cmd.c_str(),
-		"OK", 10000, 3000, nullptr, 
-		[](){ ERROR("Failed to switch network");  }
-	);
-	c->Chain(
-		"AT+CFUN=1,1",
-		"OK", 10000, 0,
+		"OK", 10000, 0, 
 		[=](std::smatch &s, char *p)
 		{
-			INFO("Changing net...");	
-		},
+			INFO("Net changed.");
+		}, 
 		[](){ ERROR("Failed to switch network");  }
-	)->Chain
-	(
-		"","",1000,60000
-	)->Chain
-	(
-		"ATE0","OK",10000, 0,
-		[=](std::smatch &s, char *p)
-		{
-			INFO("Success switched net!");	
-		},
-		[=]()
-		{
-			ERROR("Failed to switched net!");
-		}
 	);
 
 	if(net == ECATM)
 	{
 		//for catM//
 	}
-
+	
 	Enqueue(c);
 	
 }
@@ -756,4 +811,36 @@ void SerialModem::SetPrefferedNetwork(ENetworkType net)
 SerialModem::ENetworkType SerialModem::GetPrefferedNetwork()
 {
 	return m_netPreffered;
+}
+
+
+//NOTE: this blocks the queue!
+void SerialModem::TurnOnGps(std::function<void(Location)> callback, unsigned int timeout, std::function<void()> failCallback )
+{
+	if(m_isGpsOn || m_isBusy)
+	{
+		ERROR("Driver is busy!");
+		return;
+	}
+	Command *c = new Command("AT+CGNSPWR=1", "OK", 1000, 100);
+	c->Chain("AT+CGNSTST=1","OK", 1000, 1000, 
+	[this, callback, timeout, failCallback](std::smatch &s, char *c)
+	{
+		m_isGpsOn = true;
+		m_isBusy = true;
+		m_gpsTimeout = timeout;
+		m_gpsCallbackSuccess = callback;
+		m_gpsCallbackTimeout = failCallback;
+		INFO("GPS is ON, and driver is BUSY");
+	});
+	Enqueue(c);
+
+}
+
+void SerialModem::TurnOffGps()
+{
+	m_isGpsOn = false;
+	m_isBusy = false;
+	Command *c = new Command("AT+CGNSPWR=0", "", 1000, 100);
+	Enqueue(c);
 }

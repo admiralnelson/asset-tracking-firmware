@@ -7,18 +7,20 @@ void HttpSimcom::HttpDo(HttpRequest req,
                 unsigned int timeout)
 {
 	//char *p_dataOutput = nullptr;
-	std::stringstream httpParaUrl, httpParaTimeout, httpData, httpactionCmd;
+	std::stringstream httpParaUrl, httpParaTimeout, httpData, httpContentType, httpactionCmd;
 	httpParaUrl 	<< "AT+HTTPPARA=\"URL\"," << "\"" << req.url << "\""; 
 	httpParaTimeout << "AT+HTTPPARA=\"TIMEOUT\"," << timeout;
 	httpData 	  	<< "AT+HTTPDATA=" << req.length << "," << "5000";
+	httpContentType << "AT+HTTPPARA=\"CONTENT\"," << "\"" << req.contentType << "\""; 
 	httpactionCmd   << "AT+HTTPACTION=" << int(req.action);
+	
 
 	SerialModem::Command *p = new SerialModem::Command(
 		"AT+HTTPINIT", "OK", 
 		300, 0, 
 		[=](std::smatch  &s, char* p_data)
 		{ 
-			INFO_D("HTTP inited.");
+			INFO("HTTP inited.");
 			m_counter++;
 			HttpQueue q;
 			q.id = m_counter;
@@ -35,7 +37,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 				300, 0, 
 				[=](std::smatch  &s, char* p_data) 
 				{ 
-					INFO_D("HTTP failed. Terminating now"); 
+					INFO("HTTP failed. Terminating now"); 
                     HttpResponse res;
 					res.code = HttpStatusCode::Init_Failed;
 					if(m_queue.size() > 0)
@@ -53,7 +55,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000, 0, nullptr,
 		[=]()
 		{
-			INFO_D("Failed to fill parameter. Check URL");
+			INFO("Failed to fill parameter. Check URL");
 			HttpResponse res;
 			res.code = HttpStatusCode::Init_Failed;
 			
@@ -69,7 +71,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000,0, nullptr,
 		[=]()
 		{
-			INFO_D("Failed to fill parameter. Check timeout value");
+			INFO("Failed to fill parameter. Check timeout value");
 			HttpResponse res;
 			res.code = HttpStatusCode::Init_Failed;
 			if(m_queue.size() > 0)
@@ -83,6 +85,22 @@ void HttpSimcom::HttpDo(HttpRequest req,
 	)->Chain(
 		"AT+HTTPPARA=\"CID\",1", "OK",
 		1000, 0
+	)->Chain(
+		httpContentType.str().c_str(), "OK",
+		1000, 1000, nullptr,
+		[=]()
+		{
+			INFO("Failed to fill parameter. Check content type value");
+			HttpResponse res;
+			res.code = HttpStatusCode::Init_Failed;
+			if(m_queue.size() > 0)
+			{
+				HttpQueue &q = m_queue.front();			
+				q.callFail(res);
+				m_queue.pop();
+			}
+			
+		}
 	);
 
 	
@@ -95,7 +113,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			1000,0, nullptr,
 			[=]()
 			{
-				INFO_D("Failed to fill parameter. Check timeout value");
+				INFO("Failed to fill parameter. Check timeout value");
 				HttpResponse res;
 				res.code = HttpStatusCode::Init_Failed;
 				
@@ -111,7 +129,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					200, 200, 
 					[](std::smatch  &s, char* p_data) 
 					{ 
-						INFO_D("HTTP terminated.");
+						INFO("HTTP terminated.");
 					}
 				));
 			}
@@ -129,11 +147,11 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			6000, 0,
 			[](std::smatch &s, char *p_dat)
 			{
-				INFO_D("Data download ok");
+				INFO("Data download ok");
 			},
 			[=]()
 			{
-				INFO_D("failed to fill httpData param. Please check data len and actual data length");
+				INFO("failed to fill httpData param. Please check data len and actual data length");
 				HttpResponse res;
 				res.code = HttpStatusCode::Init_Failed;
 				if(m_queue.size() > 0)
@@ -148,7 +166,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					200, 200, 
 					[](std::smatch  &s, char* p_data) 
 					{ 
-						INFO_D("HTTP terminated.");
+						INFO("HTTP terminated.");
 					}
 				));
 			},
@@ -163,7 +181,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		1000, 100,
 		[=](std::smatch  &s, char* p_data) 
 		{
-			INFO_D("Executed"); 
+			INFO("Executed"); 
 			HttpQueue &q = m_queue.front();
 			q.timeStart = millis() - 100;
 		}
@@ -173,7 +191,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 		timeout*1000 + 5, 0,
 		[=](std::smatch  &s, char* p_data) 
 		{ 
-			INFO_D("Http result: %d len: %d", atoi(s[2].str().c_str()), atoi(s[3].str().c_str()) ); 
+			INFO("Http result: %d len: %d", atoi(s[2].str().c_str()), atoi(s[3].str().c_str()) ); 
 			size_t dataLen =  atoi(s[3].str().c_str());
 			size_t endByte = 0;
 			size_t count = int(ceil(dataLen / MAX_READ));
@@ -190,7 +208,7 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			}
 			q.p_dataOutput = new char[dataLen + 2 ];//std::shared_ptr<char>(new char[dataLen + 2], std::default_delete<char[]>());
 			memset(q.p_dataOutput, 0, sizeof(char) * dataLen + 2);
-			INFO_D("Looping for %d, freemem %d", count, ESP.getFreeHeap());
+			INFO("Looping for %d, freemem %d", count, ESP.getFreeHeap());
 			for (size_t i = 0; i <= count; i++)
 			{
 				std::stringstream strcmd;
@@ -209,7 +227,8 @@ void HttpSimcom::HttpDo(HttpRequest req,
 					//endByte = (dataLen - MAX_READ);
 				}
 
-				strcmd << "AT+HTTPREAD=" << startingByte << "," << endByte;		
+				strcmd << "AT+HTTPREAD=" << startingByte << "," << endByte;	
+				INFO(strcmd.str().c_str());	
 				SerialModem::Command *command1 = new SerialModem::Command(
 					strcmd.str().c_str(),
 					"^\r\n\\+HTTPREAD: ([0-9]*)",
@@ -224,21 +243,41 @@ void HttpSimcom::HttpDo(HttpRequest req,
 							readLen = dataLen - startingByte ;
 						}
 						memcpy(q.p_dataOutput + startingByte, p_data + cutHttpReadPart, readLen);
-						INFO_D("[WARN] Queue nr %d", i);						
-						//INFO_D("Msg len %d content  %.*s",  readLen,  readLen, p_data + cutHttpReadPart); 
-						//INFO_D("Msg total %s", q.p_dataOutput);
-						//INFO_D("Msg len %d content  %.*s",  readLen,  readLen, p_data); 
+						INFO("[WARN] Queue nr %d", i);						
+						//INFO("Msg len %d content  %.*s",  readLen,  readLen, p_data + cutHttpReadPart); 
+						//INFO("Msg total %s", q.p_dataOutput);
+						//INFO("Msg len %d content  %.*s",  readLen,  readLen, p_data); 
 
 					},
 					nullptr, true
 				);
-				m_serialModem->ForceEnqueue(command1);
+				m_serialModem->Enqueue(command1);
 			}
-			
+			SerialModem::Command *cmd = new SerialModem::Command("AT+HTTPTERM", 
+				"OK", 
+				200, 200,
+				[=](std::smatch  &s, char* p_data)
+				{ 
+					HttpResponse res;
+					HttpQueue q = m_queue.front();
+					INFO("POINTER %p", q.p_dataOutput);
+					INFO("DATA FIRST CHAR %c", q.p_dataOutput[0]);
+					INFO("DATA LAST CHAR %c", q.p_dataOutput[q.length - 1]);
+					res.bGetResult = q.bGetResult;
+					res.code = q.status;
+					res.data = static_cast<const char*>(q.p_dataOutput);
+					res.timeTaken = q.timeEnd - q.timeStart;	
+					res.length = q.length;		
+					q.callSuccess(res);
+					delete []q.p_dataOutput;
+					m_queue.pop();
+					INFO("HTTP terminated succesfully."); 
+				});
+			m_serialModem->Enqueue(cmd);
 		},
 		[=]() 
 		{ 
-			INFO_D("Timed out!"); 
+			INFO("Timed out!"); 
 			HttpResponse res;
 			res.code = HttpStatusCode::Timeout;
 			if(m_queue.size() > 0)
@@ -253,30 +292,9 @@ void HttpSimcom::HttpDo(HttpRequest req,
 				200, 200, 
 				[](std::smatch  &s, char* p_data) 
 				{ 
-					INFO_D("HTTP terminated.");
+					INFO("HTTP terminated.");
 				}
 			));
-		}
-	)->Chain(
-		"AT+HTTPTERM", 
-		"OK", 
-		200, 200,
-		[=](std::smatch  &s, char* p_data)
-		{ 
-			HttpResponse res;
-			HttpQueue q = m_queue.front();
-			INFO_D("POINTER %p", q.p_dataOutput);
-			INFO_D("DATA FIRST CHAR %c", q.p_dataOutput[0]);
-			INFO_D("DATA LAST CHAR %c", q.p_dataOutput[q.length - 1]);
-			res.bGetResult = q.bGetResult;
-			res.code = q.status;
-			res.data = static_cast<const char*>(q.p_dataOutput);
-			res.timeTaken = q.timeEnd - q.timeStart;	
-			res.length = q.length;		
-			q.callSuccess(res);
-			delete []q.p_dataOutput;
-			m_queue.pop();
-			INFO_D("HTTP terminated succesfully."); 
 		}
 	);
 	m_serialModem->Enqueue(p);
