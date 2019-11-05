@@ -19,6 +19,9 @@
 #include <sys/time.h>
 #include <iomanip>
 
+//{"id":"9605aa56-d851-4692-bbb1-0db2c6d481ca","auth_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJIZWlucmljaDEyMyIsImp0aSI6IjMxZjQ1NTc0LTZmNzYtNGE2Ny05YTUzLWQ5M2RhZjI0ZDRkZiIsImlhdCI6MTU3MjUyNTIyNCwicm9sIjoiYXBpX2FjY2Vzc19kZXZpY2UiLCJpZCI6Ijk2MDVhYTU2LWQ4NTEtNDY5Mi1iYmIxLTBkYjJjNmQ0ODFjYSIsIm5iZiI6MTU3MjUyNTIyMywiZXhwIjoxNjA0MDYxMjIzLCJpc3MiOiJ3ZWJBcGkiLCJhdWQiOiJodHRwOi8vMzUuMjQwLjIwNy4zNi8ifQ.8AlpXb_qxwQCiU0svYaveAbBd0pBKpbOEyz5yte6-po","expires_in":31536000} 
+
+const char *jwt = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJIZWlucmljaDEyMyIsImp0aSI6IjMxZjQ1NTc0LTZmNzYtNGE2Ny05YTUzLWQ5M2RhZjI0ZDRkZiIsImlhdCI6MTU3MjUyNTIyNCwicm9sIjoiYXBpX2FjY2Vzc19kZXZpY2UiLCJpZCI6Ijk2MDVhYTU2LWQ4NTEtNDY5Mi1iYmIxLTBkYjJjNmQ0ODFjYSIsIm5iZiI6MTU3MjUyNTIyMywiZXhwIjoxNjA0MDYxMjIzLCJpc3MiOiJ3ZWJBcGkiLCJhdWQiOiJodHRwOi8vMzUuMjQwLjIwNy4zNi8ifQ.8AlpXb_qxwQCiU0svYaveAbBd0pBKpbOEyz5yte6-po";
 
 #define RXD2 16
 #define TXD2 17
@@ -39,12 +42,12 @@ void PrintCurrentTime()
     std::ostringstream tmStr;
     tmStr << std::put_time(&lc, "%H:%M:%S, %d/%m/%Y");
     INFO("current time %s", tmStr.str().c_str());
+    INFO("in unix timestamp %u", (unsigned)time(NULL)); 
 }
 
 
 void SendLocation()
 {
-    if(doOnce) return;
     p_Modem->TurnOnGps(
         [](SerialModem::Location loc)
         {
@@ -52,7 +55,7 @@ void SendLocation()
             req.action = HttpSimcom::ActionHttp::Post;
             req.contentType = "application/json";
             req.header = std::map<std::string, std::string> {
-		        {"Authorization","Bearer"}
+		        {"Authorization",jwt}
 	        };
             cJSON *root;
             // not accurate!
@@ -60,20 +63,26 @@ void SendLocation()
             // INFO("time is %d:%d:%d, %d/%d/%d", loc.gpsTime.tm_hour,loc.gpsTime.tm_min,loc.gpsTime.tm_sec, loc.gpsTime.tm_mday, loc.gpsTime.tm_mon, loc.gpsTime.tm_year);
             time_t now = time(0);
             root = cJSON_CreateObject();
-            cJSON_AddItemToObject(root, "Longitude", cJSON_CreateNumber(loc.longitude));
-            cJSON_AddItemToObject(root, "Latitude", cJSON_CreateNumber(loc.latitude));
-            cJSON_AddItemToObject(root, "Elevation", cJSON_CreateNumber(loc.altitude));
-            cJSON_AddItemToObject(root, "Velocity", cJSON_CreateNumber(loc.speed));
-            cJSON_AddItemToObject(root, "Accuracy", cJSON_CreateNumber(loc.hdop));
-            cJSON_AddItemToObject(root, "Direction", cJSON_CreateNumber(loc.course));
             cJSON_AddItemToObject(root, "CurrentModem", cJSON_CreateNumber(0));
             cJSON_AddItemToObject(root, "CurrentEsp", cJSON_CreateNumber(0));
+            cJSON_AddItemToObject(root, "Elevation", cJSON_CreateNumber(loc.altitude));
+            cJSON_AddItemToObject(root, "Longitude", cJSON_CreateNumber(loc.longitude));
+            cJSON_AddItemToObject(root, "Latitude", cJSON_CreateNumber(loc.latitude));
             cJSON_AddItemToObject(root, "Timestamp", cJSON_CreateNumber(now));
+            cJSON_AddItemToObject(root, "Velocity", cJSON_CreateNumber(loc.speed));
             cJSON_AddItemToObject(root, "IsTampered", isTampered ? cJSON_CreateFalse() :  cJSON_CreateTrue() );
+            std::stringstream desc;
+            desc << "periodic update" << ", provider " << p_Modem->GetProviderName();
+            cJSON_AddItemToObject(root, "Descriptions", cJSON_CreateString(desc.str().c_str()));
+            cJSON_AddItemToObject(root, "SignalStrength", cJSON_CreateNumber(p_Modem->GetSignal()));
+            cJSON_AddItemToObject(root, "Direction", cJSON_CreateNumber(loc.course));
+            cJSON_AddItemToObject(root, "Accuracy", cJSON_CreateNumber(loc.hdop));
+            cJSON_AddItemToObject(root, "Battery", cJSON_CreateNumber(0));
+            cJSON_AddItemToObject(root, "ConnectionType", cJSON_CreateString( p_Modem->GetNetworkStatus() == SerialModem::EGSM ? "GSM" : "NB-IoT" ));
             req.data = cJSON_Print(root);
             req.bGetResult = true;
             req.length = strlen(cJSON_Print(root));
-            req.url = "http://35.240.207.36/api/device/update" + std::string(p_Modem->GetIMEI());
+            req.url = "http://35.240.207.36/api/device/update/" + std::string(p_Modem->GetIMEI());
             cJSON_Delete(root);
             p_http->HttpDo(req, [](HttpSimcom::HttpResponse &r)
             {
@@ -84,9 +93,8 @@ void SendLocation()
                 INFO("failed \nresult %d, data = %s", r.code ,r.data);
             });
         },
-        1000*60*7
+        1000*60*10
     );
-    doOnce = true;
 }
 
 
@@ -115,30 +123,24 @@ void UpdateDateAndTIme()
 
     p_http->HttpDo(req, [](HttpSimcom::HttpResponse &r)
     {
+        INFO("data returned from server (%d) : %s", r.code ,r.data);
         if(r.code == HttpSimcom::OK)
         {
-            INFO("data returned from server : %s",r.data);
+           
             cJSON *json = cJSON_Parse(r.data);
             cJSON *jsonSecond = cJSON_GetObjectItem(json, "Seconds");
-            cJSON *jsonMicroSecond = cJSON_GetObjectItem(json, "MicroSeconds");
-
-            timeval t;
-            timezone tz;
-            long unixTimeStampSecond = (long)jsonSecond->valuedouble;
-            long unixTimeStampMicroSecond = (long)jsonMicroSecond->valuedouble;                          
+            cJSON *jsonMicroSecond = cJSON_GetObjectItem(json, "MicroSeconds");      
             
-            t.tv_sec = unixTimeStampSecond;
-            t.tv_usec = unixTimeStampMicroSecond;    
-            
-            cJSON_Delete(json);
-
-            tz.tz_dsttime = false;
-            tz.tz_minuteswest = 0;
+          
+            timeval t = { .tv_sec =  static_cast<long>(jsonSecond->valuedouble) };
+            INFO("value of jsonSecond is %ld", t.tv_sec);
 
             settimeofday(&t, nullptr);     
             INFO("TIME is set!");  
-            PrintCurrentTime();     
-            //SendLocation();
+            PrintCurrentTime(); 
+            
+            cJSON_Delete(json);    
+            SendLocation();
         }
     },
     [](HttpSimcom::HttpResponse &r)
@@ -172,6 +174,10 @@ void setup()
         delay(100);
     }
     INFO("\n ok");
+    timeval t = { .tv_sec = 1234567890 };
+    settimeofday(&t, nullptr);
+    PrintCurrentTime();
+
 }
 
 void loop() 
@@ -180,7 +186,7 @@ void loop()
     {
         ConnectToInternet();
     }
-    if(p_Modem->GetIsGPRSConnected())
+    if(p_Modem->GetIsGPRSConnected() && !p_Modem->isBusy())
     {
         UpdateDateAndTIme();
     }

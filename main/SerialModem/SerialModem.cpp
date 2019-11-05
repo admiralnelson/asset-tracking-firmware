@@ -40,7 +40,7 @@ void SerialModem::Loop()
 
 			if (!bcommonCmd)
 			{
-				INFO("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
+				INFO_D("Executing this command (truncated, append newline yes? :%d) %.*s", cmd->m_bAppendNewLine, 100, cmd->command);
 			}
 			if(cmd->nextChain != nullptr)
 			{
@@ -158,6 +158,15 @@ void SerialModem::Loop()
 						m_netPreffered = EUNKNOWN;
 					}
 				));
+
+				Enqueue(new SerialModem::Command
+				(
+					"AT+CGSN", "([0-9]+)", 1000, 100,
+					[this](std::smatch &s, char *c)
+					{
+						m_imei = s[1].str();
+					}
+				));
 				
 
 				lastTime = millis();	
@@ -189,12 +198,14 @@ void SerialModem::Loop()
 					{
 						if( millis() - timeNow > m_gpsTimeout)
 						{
+
+							TurnOffGps();
 							if(m_gpsCallbackTimeout != nullptr)
 							{
 								m_gpsCallbackTimeout();
 							}
 							ERROR("GPS fix timed out!");
-							TurnOffGps();
+							
 						}
 						if(serialResult.length() > 0)
 						{
@@ -209,6 +220,7 @@ void SerialModem::Loop()
 							}
 							else
 							{
+								TurnOffGps();
 								INFO("GPS location LAT: %ld, LONG: %ld", gpsParser.getLatitude(), gpsParser.getLongitude());
 								Location loc;
 								loc.longitude = (double)gpsParser.getLongitude() / 1000000;
@@ -229,7 +241,7 @@ void SerialModem::Loop()
 
 								INFO("GPS CALLBACK SHOULD BE CALLED!");
 								m_gpsCallbackSuccess(loc);
-								TurnOffGps();
+								
 							}
 						}
 						else
@@ -750,15 +762,10 @@ void SerialModem::Begin(Stream *serialStream)
 		m_serialStream->println("AT+CLTS=1");
 		std::string s = ReadSerial();
 		INFO("%s", s.c_str());
-		Enqueue(new Command
-		(
-			"AT+CGSN", "^\r\n([0-9]+)", 1000, 100,
-			[this](std::smatch &s, char *c)
-			{
-				INFO("Serial number is %s", s[1].str().c_str());
-				m_imei = s[1].str();
-			}
-		));
+		m_serialStream->println("AT+CGSN");
+		delay(300);
+		s = ReadSerial();
+		INFO("%s", s.c_str());
 		xTaskCreatePinnedToCore(this->StartTaskImplLoop, "SerialModem_Loop", 16384 * 2, this, 1,  &m_task, 1);
 		
 	}
