@@ -200,17 +200,12 @@ void HttpSimcom::HttpDo(HttpRequest req,
 			q.status = (HttpStatusCode) atoi(s[2].str().c_str());
 			q.length = dataLen;
 
-			if(dataLen == 0 || !q.bGetResult) 
-			{
-				q.p_dataOutput = new char[2];//std::shared_ptr<char>(new char[2], std::default_delete<char[]>());
-				memset(q.p_dataOutput, 0, sizeof(char) *  2);
-				return;
-			}
 			q.p_dataOutput = new char[dataLen + 2 ];//std::shared_ptr<char>(new char[dataLen + 2], std::default_delete<char[]>());
 			memset(q.p_dataOutput, 0, sizeof(char) * dataLen + 2);
 			INFO("Looping for %d, freemem %d", count, ESP.getFreeHeap());
 			for (size_t i = 0; i <= count; i++)
 			{
+				if(dataLen == 0 || !q.bGetResult) continue;
 				std::stringstream strcmd;
 				size_t startingByte = 0;
 				if( i > 0)

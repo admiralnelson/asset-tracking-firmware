@@ -104,7 +104,7 @@ void ConnectToInternet()
 		!p_Modem->GetIsGPRSConnected() && !p_Modem->isBusy())
 	{
 		INFO("Registering GPRS now");
-		p_Modem->ConnectGPRS("internet", "", "");
+		p_Modem->ConnectGPRS("m2mdev", "", "");
 	}
 }
 
@@ -163,9 +163,10 @@ void setup()
     }
     INFO("OK");
     hardwareSerial.begin(115200, SERIAL_8N1, RXD2, TXD2);
+    
 	p_Modem->Begin(&hardwareSerial);
 	//p_Modem->SetPrefferedNetwork(SerialModem::ENBIOT); //commented, NB is OK, i just don't want it to finding network again
-	p_Modem->SetPrefferedNetwork(SerialModem::EGSM);
+	//p_Modem->SetPrefferedNetwork(SerialModem::ENBIOT);
     p_http = new HttpSimcom(*p_Modem); 
     INFO("delay for 60 sec");
     while(millis() - now < 1000 * 60)
